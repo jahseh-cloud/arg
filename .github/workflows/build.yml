@@ -32,6 +32,10 @@ jobs:
           msg=$(sed -n '/SELFTEST SUMMARY/,$p' selftest.log | head -80 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::notice title=Selftest::${msg}"
           grep "SELFTEST TRACE" selftest.log | sed 's/.*SELFTEST //' > traces.txt || true
+          for name in $(grep "SELFTEST RESULT" selftest.log | grep " FAIL" | sed 's/.*RESULT \([a-z_]*\) .*/\1/'); do
+            msg=$(grep "TRACE $name " traces.txt | cut -c1-330 | head -40 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+            echo "::notice title=Trace $name::${msg}"
+          done
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -143,6 +143,8 @@ public class SpindleEntity extends HostileEntity {
 	public record Memory(Vec3d pos, int expiresAt) {}
 	/** Counters for /spindle debug and the automated tests. */
 	public int statAttacks, statGrabs, statBlocksDug, statProbeSearches, statProbeSpots;
+	/** Free-form note goals leave for /spindle debug and the tests. */
+	public String debugNote = "";
 
 	// ---------------------------------------------------------------- client state
 	public float glow = 0.8f, prevGlow = 0.8f;
@@ -1167,10 +1169,10 @@ public class SpindleEntity extends HostileEntity {
 	public String debugLine(Entity viewer) {
 		String dest = destination == null ? "-" : String.format("%.0fm", Math.sqrt(squaredDistanceTo(destination)));
 		String sense = mode != Mode.HUNT ? "" : (isTracking() ? " tracking" : " LOST " + lostTicks);
-		return String.format("%s %d%%%s | h%.1f%s%s | stuck %d unreach %d | dest %s | probe %s | %.0fm",
+		return String.format("%s %d%%%s | h%.1f%s%s | stuck %d unreach %d | dest %s | probe %s | %.0fm %s",
 				mode, (int) (getTensionFraction() * 100), sense,
 				getBodyHeight(), isHanging() ? " hanging" : "", frozen ? " FROZEN" : "",
-				stuckLevel, unreachableTicks, dest, tendril.getState(), Math.sqrt(squaredDistanceTo(viewer)));
+				stuckLevel, unreachableTicks, dest, tendril.getState(), Math.sqrt(squaredDistanceTo(viewer)), debugNote);
 	}
 
 	// ================================================================ hanging from cave ceilings

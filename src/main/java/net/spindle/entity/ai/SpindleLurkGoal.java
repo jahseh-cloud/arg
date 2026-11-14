@@ -25,7 +25,7 @@ public class SpindleLurkGoal extends Goal {
 	@Nullable private BlockPos floorCell;
 	private double hangY;
 	private int ticks;
-	private int cooldown = 200;
+	private int cooldown = 40;
 	private final ArrayDeque<Vec3d> trail = new ArrayDeque<>();
 
 	public SpindleLurkGoal(SpindleEntity spindle) {
@@ -45,7 +45,7 @@ public class SpindleLurkGoal extends Goal {
 			while (trail.size() > 5) trail.removeFirst();
 		}
 		if (--cooldown > 0) return false;
-		cooldown = 100;
+		cooldown = 40;
 		if (spindle.getMode() != SpindleEntity.Mode.STALK || target == null) return false;
 		if (spindle.getTensionFraction() < 0.3f || spindle.isWatched()) return false;
 		if (spindle.getWorld().isSkyVisible(target.getBlockPos())) return false; // underground / indoors only

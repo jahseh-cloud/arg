@@ -190,6 +190,7 @@ public class SpindleDigGoal extends Goal {
 				}
 			}
 			if (ok) {
+				spindle.debugNote = "dig:" + dir.asString();
 				toClear.clear();
 				toClear.addAll(cells);
 				stepTarget = target;
@@ -199,6 +200,7 @@ public class SpindleDigGoal extends Goal {
 			}
 		}
 		failures++;
+		spindle.debugNote = "dig:blocked x" + failures;
 	}
 
 	private static boolean blocks(ServerWorld world, BlockPos pos) {

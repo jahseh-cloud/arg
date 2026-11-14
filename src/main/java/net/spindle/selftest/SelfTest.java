@@ -452,14 +452,14 @@ public final class SelfTest {
 		void setup() {
 			Scenes.hall(world, o, 5, Scenes.STONE);
 			spindle = Scenes.spawnSpindle(world, o.getX() + 2.5, o.getY(), o.getZ() + 0.5, -90f);
-			victim = TestPlayer.spawn(world, "t_" + name, at(20.5, 0, 0.5), -90f);
-			victim.patrol(at(36.5, 0, 0.5), at(12.5, 0, 0.5));
+			victim = TestPlayer.spawn(world, "t_" + name, at(36.5, 0, 0.5), 90f);
 		}
 
 		@Override
 		String check() {
 			if (t == 10) spindle.noticeTarget(victim);
 			if (t == 30) spindle.setTensionFraction(0.4f);
+			if (t == 300) victim.patrol(at(12.5, 0, 0.5), at(36.5, 0, 0.5)); // starts pacing the hall
 			if (!hurt()) return null;
 			return (hungAt >= 0 ? "PASS hung from the ceiling at t=" + hungAt + " and" : "FAIL never hung from the ceiling;") + " hit the player at t=" + t;
 		}
