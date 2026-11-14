@@ -1,6 +1,7 @@
 package net.spindle;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.entity.EntityType;
@@ -11,6 +12,7 @@ import net.minecraft.item.SpawnEggItem;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
+import net.spindle.entity.SpindleChunkLoader;
 import net.spindle.entity.SpindleEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +43,8 @@ public class Spindle implements ModInitializer {
 	public void onInitialize() {
 		FabricDefaultAttributeRegistry.register(SPINDLE, SpindleEntity.createSpindleAttributes());
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.SPAWN_EGGS).register(entries -> entries.add(SPINDLE_SPAWN_EGG));
+		// After a restart, reload wherever each Spindle was so it keeps going without anyone nearby.
+		ServerWorldEvents.LOAD.register((server, world) -> SpindleChunkLoader.get(world).wakeAll(world));
 		LOGGER.info("Something tall is walking around.");
 	}
 }

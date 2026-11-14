@@ -51,6 +51,7 @@ import net.spindle.entity.ai.SpindleSnuffLightGoal;
 import net.spindle.entity.ai.SpindleStalkGoal;
 import net.spindle.entity.ai.SpindleTargetGoal;
 import net.spindle.entity.ai.SpindleTendrilGoal;
+import net.spindle.entity.ai.SpindleTravelGoal;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
@@ -119,6 +120,7 @@ public class SpindleEntity extends HostileEntity {
 	public float glow = 0.8f, prevGlow = 0.8f;
 	public int attackAnimTicks;
 	public Vec3d clientTip, prevClientTip;
+	public final SpindleLegState legs = new SpindleLegState();
 
 	public SpindleEntity(EntityType<? extends SpindleEntity> type, World world) {
 		super(type, world);
@@ -160,6 +162,7 @@ public class SpindleEntity extends HostileEntity {
 		this.goalSelector.add(4, new SpindleHuntGoal(this));
 		this.goalSelector.add(5, new SpindleSnuffLightGoal(this));
 		this.goalSelector.add(6, new SpindleStalkGoal(this));
+		this.goalSelector.add(7, new SpindleTravelGoal(this));
 		this.goalSelector.add(8, new WanderAroundFarGoal(this, 0.7));
 		this.targetSelector.add(1, new SpindleTargetGoal(this));
 	}
@@ -285,6 +288,7 @@ public class SpindleEntity extends HostileEntity {
 
 	private void serverTick(ServerWorld world) {
 		if (this.age % 2 == 0) updateWatchers(world);
+		if (this.age % 20 == 0 && isAlive()) SpindleChunkLoader.get(world).update(world, getUuid(), getChunkPos());
 		recentDamage = Math.max(0f, recentDamage - 0.05f);
 		if (attackCooldown > 0) attackCooldown--;
 		updateMode(world);
@@ -312,6 +316,7 @@ public class SpindleEntity extends HostileEntity {
 		glow += (targetGlow - glow) * 0.05f;
 
 		if (attackAnimTicks > 0) attackAnimTicks--;
+		legs.tick(this);
 
 		Vec3d core = getPos().add(0, MathHelper.lerp(foldProgress, CORE_HEIGHT_STANDING, CORE_HEIGHT_FOLDED), 0);
 		Vec3d target = isTendrilActive() ? getTendrilTip() : core;
@@ -781,12 +786,15 @@ public class SpindleEntity extends HostileEntity {
 
 	@Override
 	public void playStepSound(BlockPos pos, BlockState state) {
-		float volume = switch (mode) {
-			case HUNT -> 0.7f;
-			case STALK -> 0.06f;
-			default -> 0.3f;
-		};
-		playSound(SoundEvents.ENTITY_SPIDER_STEP, volume, 0.45f);
+		// Footfalls are played per foot by SpindleLegState on the client.
+	}
+
+	@Override
+	public void remove(Entity.RemovalReason reason) {
+		if (getWorld() instanceof ServerWorld sw && reason.shouldDestroy()) {
+			SpindleChunkLoader.get(sw).forget(getUuid());
+		}
+		super.remove(reason);
 	}
 
 	// ================================================================ save / load

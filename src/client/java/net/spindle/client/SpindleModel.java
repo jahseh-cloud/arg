@@ -9,6 +9,8 @@ import net.minecraft.client.model.ModelTransform;
 import net.minecraft.client.model.TexturedModelData;
 import net.minecraft.client.render.entity.model.SinglePartEntityModel;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
+import net.spindle.entity.SpindleLegState;
 import net.spindle.entity.SpindleEntity;
 
 /**
@@ -24,13 +26,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 	private static final float LOWER_LEN = 120f;
 	private static final float ARM_UPPER_LEN = 30f;
 	private static final float ARM_LOWER_LEN = 36f;
-	/** angle of each leg's resting foot, measured from straight ahead */
-	private static final float[] LEG_ANGLES = {
-			(float) Math.toRadians(38), (float) Math.toRadians(88), (float) Math.toRadians(138)
-	};
 	private static final float[] HIP_Z = {-9f, 0f, 9f};
-	/** small per-leg differences so the gait looks a little wrong */
-	private static final float[] LEG_JITTER = {0.0f, 0.37f, 0.11f, 0.53f, 0.29f, 0.71f};
 
 	private final ModelPart root;
 	private final ModelPart body;
@@ -116,46 +112,46 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 		attack = MathHelper.clamp(attack, 0f, 1f);
 		float strike = MathHelper.sin(attack * (float) Math.PI);
 
-		// Body: hangs high between the legs, breathes, dips with each step.
+		// Body: hangs high between the legs at the average height of its feet, tilts with the ground, breathes.
+		SpindleLegState legs = entity.legs;
+		float groundOff = MathHelper.lerp(tickDelta, legs.prevGroundOffset, legs.groundOffset);
+		float tiltPitch = MathHelper.lerp(tickDelta, legs.prevPitch, legs.pitch);
+		float tiltRoll = MathHelper.lerp(tickDelta, legs.prevRoll, legs.roll);
 		float breathe = MathHelper.sin(animationProgress * 0.06f) * 1.2f;
-		float stepBob = Math.abs(MathHelper.sin(limbAngle * 0.6f)) * 3f * speed;
-		float bodyY = MathHelper.lerp(fold, -60f, 6f) + breathe + stepBob + strike * 6f;
+		float stepBob = Math.abs(MathHelper.sin(limbAngle * 0.6f)) * 2f * speed;
+		float bodyY = MathHelper.lerp(fold, -60f, 6f) - groundOff * 16f + breathe + stepBob + strike * 6f;
 		body.pivotY = bodyY;
-		body.pitch = strike * 0.35f + MathHelper.sin(animationProgress * 0.04f) * 0.03f;
-		body.roll = MathHelper.sin(limbAngle * 0.3f) * 0.04f * speed;
+		body.pitch = strike * 0.35f + MathHelper.sin(animationProgress * 0.04f) * 0.03f - tiltPitch;
+		body.roll = -tiltRoll;
 		body.yaw = 0f;
 
-		float radius = MathHelper.lerp(fold, 90f, 14f);
 		float l1 = UPPER_LEN * legScale;
 		float l2 = LOWER_LEN * legScale;
-		float stride = 18f * legScale * speed;
-		float liftHeight = 14f * legScale * speed;
+		Vec3d base = entity.getLerpedPos(tickDelta);
+		float bodyYaw = MathHelper.lerpAngleDegrees(tickDelta, entity.prevBodyYaw, entity.bodyYaw);
 
-		for (int side = 0; side < 2; side++) {
-			float s = side == 0 ? 1f : -1f;
-			for (int k = 0; k < LEGS_PER_SIDE; k++) {
-				int i = side * LEGS_PER_SIDE + k;
-				float hipX = s * 8f;
-				float hipY = bodyY + 3f;
-				float hipZ = HIP_Z[k];
+		for (int i = 0; i < SpindleLegState.LEGS; i++) {
+			float s = i < 3 ? 1f : -1f;
+			int k = i % 3;
+			float hipX = s * 8f;
+			float hipZ = HIP_Z[k];
+			// Hips follow the body's tilt a little so legs stay attached.
+			float hipY = bodyY + 3f + hipZ * tiltPitch - hipX * tiltRoll;
 
-				float a = LEG_ANGLES[k];
-				float footX = s * radius * MathHelper.sin(a);
-				float footZ = -radius * MathHelper.cos(a);
-				float footY = 24f;
-
-				// Tetrapod-ish gait: alternate legs move together, with a little per-leg jitter.
-				float phase = ((k + side) % 2) * (float) Math.PI + LEG_JITTER[i];
-				float c = limbAngle * 0.6f + phase;
-				footZ -= MathHelper.sin(c) * stride;
-				footY -= Math.max(0f, MathHelper.cos(c)) * liftHeight;
-
-				// Idle twitch: one leg at a time lifts a little and taps.
-				float twitch = MathHelper.sin(animationProgress * 0.05f + i * 1.9f);
-				if (twitch > 0.97f) footY -= (twitch - 0.97f) * 200f * legScale * (1f - speed);
-
-				solveLeg(upper[i], lower[i], hipX, hipY, hipZ, footX, footY, footZ, l1, l2, legScale);
+			float fx, fy, fz;
+			if (legs.isReady()) {
+				Vec3d footWorld = legs.prevFoot[i].lerp(legs.foot[i], tickDelta);
+				Vec3d m = SpindleLegState.worldToModel(footWorld.subtract(base), bodyYaw);
+				fx = (float) m.x;
+				fy = (float) m.y;
+				fz = (float) m.z;
+			} else {
+				float radius = SpindleLegState.restRadius(fold);
+				fx = SpindleLegState.restModelX(i, radius);
+				fy = 24f;
+				fz = SpindleLegState.restModelZ(i, radius);
 			}
+			solveLeg(upper[i], lower[i], hipX, hipY, hipZ, fx, fy, fz, l1, l2, legScale);
 		}
 
 		// Front arms: tucked under the body, thrown forward to strike, raised while the tendril is out.
@@ -170,7 +166,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 				tz = -40f * legScale;
 			}
 			tx = MathHelper.lerp(strike, tx, s * 3f);
-			ty = MathHelper.lerp(strike, ty, 22f);
+			ty = MathHelper.lerp(strike, ty, 22f - groundOff * 16f);
 			tz = MathHelper.lerp(strike, tz, -56f * legScale);
 			ty += MathHelper.sin(animationProgress * 0.08f + side) * 1.5f;
 			solveLeg(armUpper[side], armLower[side], hipX, hipY, hipZ, tx, ty, tz,
