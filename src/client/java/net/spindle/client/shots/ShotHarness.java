@@ -25,7 +25,7 @@ import java.util.function.Supplier;
 public final class ShotHarness {
 	private record Shot(String name, Vec3d camera, Supplier<Vec3d> lookAt, int delay, Supplier<Boolean> ready, Runnable atStart) {
 		Shot(String name, Vec3d camera, Supplier<Vec3d> lookAt, int delay, Supplier<Boolean> ready) {
-			this(name, camera, lookAt, wait, ready, null);
+			this(name, camera, lookAt, delay, ready, null);
 		}
 	}
 
