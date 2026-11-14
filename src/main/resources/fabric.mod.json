@@ -1,0 +1,20 @@
+{
+	"schemaVersion": 1,
+	"id": "spindle",
+	"version": "${version}",
+	"name": "Spindle",
+	"description": "Something tall is walking around your world.",
+	"authors": [],
+	"license": "All-Rights-Reserved",
+	"environment": "*",
+	"entrypoints": {
+		"main": ["net.spindle.Spindle"],
+		"client": ["net.spindle.client.SpindleClient"]
+	},
+	"depends": {
+		"fabricloader": ">=0.16.0",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
