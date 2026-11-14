@@ -152,7 +152,7 @@ public class SpindleStalkGoal extends Goal {
 			BlockPos c = shortlist.remove(bi);
 			double score = scores.remove(bi);
 			Vec3d cv = Vec3d.ofBottomCenter(c);
-			if (spindle.isSpotVisibleToAnyone(cv)) continue;
+			if (!spindle.isSpotHidden(cv)) continue;
 			if (spindle.hasLineOfSight(cv.add(0, 1.2, 0), predicted.add(0, 1.0, 0))) score += 8; // ambush point
 			if (score > bestScore) {
 				bestScore = score;
@@ -196,13 +196,20 @@ public class SpindleStalkGoal extends Goal {
 			Vec3d toSpot = candidate.subtract(targetPos);
 			Vec3d toSpotFlat = new Vec3d(toSpot.x, 0, toSpot.z).normalize();
 			double facing = lookFlat.dotProduct(toSpotFlat);
-			boolean visible = spindle.isSpotVisibleToAnyone(candidate);
+			boolean hidden = spindle.isSpotHidden(candidate);
 			if (glimpse) {
-				if (!visible || facing > 0.3) return -1e9;
+				// Somewhere they'd see it if they turned, but not right in front of them.
+				if (hidden || facing > 0.3) return -1e9;
 				return 10 - Math.abs(facing);
 			}
-			if (visible) return -1e9;
-			double score = 10;
+			double score;
+			if (hidden) {
+				score = 20;                                          // behind cover, or far off in the dark
+			} else if (!spindle.isSpotInSomeonesView(candidate)) {
+				score = 8;                                           // in the open, but nobody is facing that way
+			} else {
+				return -1e9;
+			}
 			score -= candidate.distanceTo(spindle.getPos()) * 0.08;
 			score += (1 - facing) * 3;
 			if (spindle.getWorld().getLightLevel(BlockPos.ofFloored(candidate)) < 5) score += 4;

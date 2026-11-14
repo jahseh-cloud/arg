@@ -1,29 +1,52 @@
 package net.spindle.entity;
 
 import net.minecraft.block.BlockState;
+import net.minecraft.registry.tag.BlockTags;
 import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.shape.VoxelShape;
 import net.minecraft.world.World;
+import net.spindle.SpindleSounds;
 
 /**
- * Client-side procedural walking. Each foot is planted at a real spot in the world and stays there
- * until the body has moved far enough away from it; then that leg lifts and steps to a new spot on
- * the actual ground (slopes, stairs, cave floors). Neighbouring legs never step at the same time.
- * The body rides at the average height of its feet and tilts with the terrain.
+ * Client-side procedural walking.
+ *
+ * Feet: each foot is planted at a real spot in the world and stays there until the body has moved
+ * far enough away from it; then that leg lifts and steps to a new spot on the actual ground (slopes,
+ * stairs, cave floors). Neighbouring legs never step at the same time. In corridors and tunnels the
+ * feet pull in or swing fore and aft so they never land inside a wall.
+ *
+ * Knees: normally they ride high above the body. Where there's a ceiling or a wall in the way, each
+ * knee swings sideways around its hip-foot line until the whole leg is clear of solid blocks.
+ *
+ * Body: rides at the average height of its feet, tilts with the terrain, and sits as high as the
+ * server says there's room for (see SpindleEntity#getBodyHeight).
  */
 public class SpindleLegState {
 	public static final int LEGS = 6;
-	public static final float[] LEG_ANGLES = {
+	/** Bone lengths in pixels (1/16 block) at full size. */
+	public static final float UPPER_LEN = 84f, LOWER_LEN = 120f;
+	public static final float[] HIP_Z = {-9f, 0f, 9f};
+	public static final float HIP_X = 8f;
+	/** Resting foot direction of each leg, measured from straight ahead. */
+	private static final float[] LEG_ANGLES = {
 			(float) Math.toRadians(38), (float) Math.toRadians(88), (float) Math.toRadians(138)
 	};
+	/** Where each leg points instead when there's no room to the sides (tunnels). */
+	private static final float[] TUNNEL_ANGLES = {
+			(float) Math.toRadians(12), (float) Math.toRadians(160), (float) Math.toRadians(170)
+	};
+	private static final float[] TILT_STEPS = {0f, 0.4f, 0.8f, 1.2f, 1.5f};
 
 	public final Vec3d[] foot = new Vec3d[LEGS];
 	public final Vec3d[] prevFoot = new Vec3d[LEGS];
+	/** How far each knee is swung sideways out of its upright plane, in radians. */
+	public final float[] tilt = new float[LEGS];
+	public final float[] prevTilt = new float[LEGS];
+	private final float[] tiltTarget = new float[LEGS];
 	private final Vec3d[] from = new Vec3d[LEGS];
 	private final Vec3d[] to = new Vec3d[LEGS];
 	private final float[] progress = new float[LEGS];
@@ -32,32 +55,54 @@ public class SpindleLegState {
 	private float stepLift = 1f;
 
 	public float groundOffset, prevGroundOffset;
-	/** Visual fold actually drawn: the hitbox fold, or more if the ceiling is low. */
+	/** 0 = standing tall, 1 = folded flat. Follows the server-synced body height. */
 	public float visualFold, prevVisualFold;
 	public float pitch, prevPitch;
 	public float roll, prevRoll;
 	private boolean initialized;
 	private float lastPlantFold;
 	private boolean lastHanging;
-	private static final float[] HIP_Z = {-9f, 0f, 9f};
-	private static final float LEG_REACH_PX = 84f + 120f;
 
 	public boolean isReady() {
 		return initialized;
 	}
 
-	/** Resting foot position in model space (pixels; +Y down, ground at 24, front is -Z). */
-	public static float restModelX(int leg, float radius) {
-		float s = leg < 3 ? 1f : -1f;
-		return s * radius * MathHelper.sin(LEG_ANGLES[leg % 3]);
-	}
+	// ---------------------------------------------------------------- shared geometry
 
-	public static float restModelZ(int leg, float radius) {
-		return -radius * MathHelper.cos(LEG_ANGLES[leg % 3]);
+	public static float legScale(float fold) {
+		return MathHelper.lerp(fold, 1.0f, 0.3f);
 	}
 
 	public static float restRadius(float fold) {
 		return MathHelper.lerp(fold, 90f, 14f);
+	}
+
+	/** Model-space Y of the body's pivot for a given fold (before terrain offset and animation). */
+	public static float bodyModelY(float fold) {
+		return MathHelper.lerp(fold, -60f, 6f);
+	}
+
+	/** Resting foot position in model space (pixels; +Y down, ground at 24, front is -Z). */
+	public static float restModelX(int leg, float radius) {
+		return footModelX(leg, radius, LEG_ANGLES[leg % 3]);
+	}
+
+	public static float restModelZ(int leg, float radius) {
+		return footModelZ(radius, LEG_ANGLES[leg % 3]);
+	}
+
+	private static float footModelX(int leg, float radius, float angle) {
+		float s = leg < 3 ? 1f : -1f;
+		return s * radius * MathHelper.sin(angle);
+	}
+
+	private static float footModelZ(float radius, float angle) {
+		return -radius * MathHelper.cos(angle);
+	}
+
+	/** Which way a leg's knee swings when it has to tilt, in model space: front legs forward, the rest backward. */
+	public static Vec3d sideHintModel(int leg) {
+		return new Vec3d(0, 0, leg % 3 == 0 ? -1 : 1);
 	}
 
 	/** Converts a model-space point (pixels) to a world offset from the entity's feet, for a given body yaw. */
@@ -66,6 +111,14 @@ public class SpindleLegState {
 		double t = Math.toRadians(180.0 - bodyYawDeg);
 		double c = Math.cos(t), s = Math.sin(t);
 		return new Vec3d(lx * c + lz * s, ly, -lx * s + lz * c);
+	}
+
+	/** A model-space direction as a world direction. */
+	public static Vec3d modelDirToWorld(Vec3d dir, float bodyYawDeg, boolean hanging) {
+		double lx = -dir.x, ly = -dir.y, lz = dir.z;
+		double t = Math.toRadians(180.0 - bodyYawDeg);
+		double c = Math.cos(t), s = Math.sin(t);
+		return new Vec3d(lx * c + lz * s, hanging ? -ly : ly, -lx * s + lz * c);
 	}
 
 	/** Upside down (hanging from a ceiling): the whole model is mirrored about a horizontal plane. */
@@ -86,56 +139,92 @@ public class SpindleLegState {
 		return new Vec3d(-lx * 16.0, (1.501 - d.y) * 16.0, lz * 16.0);
 	}
 
+	/**
+	 * Knee position of a two-bone leg, in whatever space the inputs are in.
+	 * With tilt 0 the knee points as far "up" as it can; tilt swings it around the hip-foot line
+	 * toward sideHint (positive) or away from it (negative).
+	 */
+	public static Vec3d solveKnee(Vec3d hip, Vec3d foot, double l1, double l2, Vec3d up, Vec3d sideHint, double tilt) {
+		Vec3d axis = foot.subtract(hip);
+		double dist = axis.length();
+		Vec3d a = dist < 1e-5 ? new Vec3d(-up.x, -up.y, -up.z) : axis.multiply(1.0 / dist);
+		double d = MathHelper.clamp(dist, Math.abs(l1 - l2) + 0.01, l1 + l2 - 0.01);
+		double along = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d);
+		double r = Math.sqrt(Math.max(0.0, l1 * l1 - along * along));
+		Vec3d u = up.subtract(a.multiply(up.dotProduct(a)));
+		if (u.lengthSquared() < 1e-6) u = sideHint.subtract(a.multiply(sideHint.dotProduct(a)));
+		u = u.normalize();
+		Vec3d w = sideHint.subtract(a.multiply(sideHint.dotProduct(a))).subtract(u.multiply(sideHint.dotProduct(u)));
+		if (w.lengthSquared() < 1e-6) w = a.crossProduct(u);
+		w = w.normalize();
+		return hip.add(a.multiply(along)).add(u.multiply(r * Math.cos(tilt))).add(w.multiply(r * Math.sin(tilt)));
+	}
+
+	// ---------------------------------------------------------------- per tick
+
 	public void tick(SpindleEntity e) {
 		World world = e.getWorld();
 		Vec3d pos = e.getPos();
 		Vec3d vel = pos.subtract(e.prevX, e.prevY, e.prevZ);
-		// Shrink to fit the room: a low ceiling folds the legs down even if the hitbox is standing.
+		boolean hanging = e.isHanging();
+
 		prevVisualFold = visualFold;
-		float roomFold = 1f - headroomPosture(world, pos);
-		float targetFold = e.isHanging() ? 1f : Math.max(e.foldProgress, roomFold);
-		visualFold += (targetFold - visualFold) * 0.2f;
+		float targetFold = (hanging || e.isDead()) ? 1f : e.getFold();
+		visualFold += (targetFold - visualFold) * (e.isDead() ? 0.12f : 0.3f);
 		if (!initialized) prevVisualFold = visualFold = targetFold;
 		float fold = visualFold;
 		float radius = restRadius(fold);
+		float scale = legScale(fold);
+		boolean low = fold > 0.5f;
 		boolean hunting = e.getSyncedMode() == SpindleEntity.Mode.HUNT;
 
-		stepDuration = fold > 0.5f ? 4f : (hunting ? 5f : 8f);
+		stepDuration = low ? 4f : (hunting ? 5f : 8f);
 		stepLift = MathHelper.lerp(fold, 1.1f, 0.3f);
 		double stepDist = MathHelper.lerp(fold, 1.5, 0.45);
 		Vec3d lead = new Vec3d(vel.x, 0, vel.z).multiply(stepDuration * 1.3);
+		double l1 = UPPER_LEN * scale / 16.0, l2 = LOWER_LEN * scale / 16.0;
+		double reach = (l1 + l2) * 0.96;
+		float hipYm = bodyModelY(fold) + 3f - groundOffset * 16f;
 
-		boolean folded = fold > 0.5f;
-		boolean hanging = e.isHanging();
-		float legScale = MathHelper.lerp(fold, 1.0f, 0.3f);
-		double reach = LEG_REACH_PX * legScale / 16.0 * 0.96;
 		Vec3d[] hip = new Vec3d[LEGS];
 		Vec3d[] home = new Vec3d[LEGS];
+		Vec3d up = new Vec3d(0, hanging ? -1 : 1, 0);
+		double ceilRef = pos.y + 2 * SpindleEntity.HANG_PIVOT;
 		for (int i = 0; i < LEGS; i++) {
 			float s = i < 3 ? 1f : -1f;
-			float hipYm = MathHelper.lerp(fold, -60f, 6f) + 3f - groundOffset * 16f;
-			hip[i] = pos.add(mirror(modelToWorld(s * 8f, hipYm, HIP_Z[i % 3], e.bodyYaw), hanging));
-			// Pick the resting spot; if the ground there is out of reach (cliff, deep hole), pull the foot inward.
-			// Pull the foot inward until it lands on real ground the leg can reach without passing
-			// through a wall (corridors, doorways, cave walls).
-			Vec3d chosen = null;
-			Vec3d bodyPoint = pos.add(0, hanging ? 0.7 : Math.min(1.2, 0.3 + (1 - fold) * 3), 0);
-			for (float pull : new float[]{1.0f, 0.8f, 0.6f, 0.45f, 0.3f, 0.15f}) {
-				Vec3d off = modelToWorld(restModelX(i, radius * pull), 24, restModelZ(i, radius * pull), e.bodyYaw);
+			hip[i] = pos.add(mirror(modelToWorld(s * HIP_X, hipYm, HIP_Z[i % 3], e.bodyYaw), hanging));
+			Vec3d side = modelDirToWorld(sideHintModel(i), e.bodyYaw, false);
+			home[i] = null;
+			// First choice is the resting spot; then pulled in; then swung fore/aft (tunnels); then tucked under.
+			for (int c = 0; c < 8 && home[i] == null; c++) {
+				boolean swing = c == 2 || c == 3 || c == 5;
+				float angle = swing ? TUNNEL_ANGLES[i % 3] : LEG_ANGLES[i % 3];
+				float pull = switch (c) {
+					case 0, 2 -> 1.0f;
+					case 1 -> 0.8f;
+					case 3 -> 0.75f;
+					case 4 -> 0.6f;
+					case 5 -> 0.5f;
+					case 6 -> 0.4f;
+					default -> 0.2f;
+				};
+				Vec3d off = modelToWorld(footModelX(i, radius * pull, angle), 24, footModelZ(radius * pull, angle), e.bodyYaw);
 				double hx = pos.x + off.x + lead.x;
 				double hz = pos.z + off.z + lead.z;
-				double gy = hanging ? ceilingAt(world, hx, hz, pos.y + 2 * SpindleEntity.HANG_PIVOT) : groundAt(world, hx, hz, pos.y, folded);
-				if (Double.isNaN(gy)) continue;
-				Vec3d cand = new Vec3d(hx, gy, hz);
-				if (cand.distanceTo(hip[i]) > reach) continue;
-				if (!hanging && !clearLine(world, e, bodyPoint, cand.add(0, 0.3, 0))) continue;
-				chosen = cand;
-				break;
+				// The floor at its own level first; failing that (a building in the way), the roof.
+				for (int level = 0; level < (hanging || low ? 1 : 2) && home[i] == null; level++) {
+					double gy = hanging ? ceilingAt(world, hx, hz, ceilRef)
+							: level == 0 ? groundAt(world, hx, hz, pos.y, low) : highSurfaceAt(world, hx, hz, pos.y);
+					if (Double.isNaN(gy)) continue;
+					Vec3d cand = new Vec3d(hx, gy, hz);
+					if (cand.distanceTo(hip[i]) > reach) continue;
+					if (!legCanReach(world, hip[i], cand, l1, l2, up, side)) continue;
+					home[i] = cand;
+				}
 			}
-			if (chosen == null) chosen = new Vec3d(pos.x + lead.x, pos.y, pos.z + lead.z); // tuck under the body
-			home[i] = chosen;
+			if (home[i] == null) home[i] = new Vec3d(pos.x + lead.x, hanging ? ceilRef : pos.y, pos.z + lead.z);
 		}
-		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.25f || hanging != lastHanging;
+		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.2f || hanging != lastHanging;
 		if (replantAll) {
 			lastPlantFold = fold;
 			lastHanging = hanging;
@@ -144,7 +233,7 @@ public class SpindleLegState {
 		boolean teleported = false;
 		if (initialized) {
 			for (int i = 0; i < LEGS; i++) {
-				if (foot[i].squaredDistanceTo(home[i]) > 10 * 10) teleported = true;
+				if (foot[i].squaredDistanceTo(home[i]) > 12 * 12) teleported = true;
 			}
 		}
 		if (!initialized || teleported) {
@@ -156,7 +245,10 @@ public class SpindleLegState {
 			initialized = true;
 		}
 
-		for (int i = 0; i < LEGS; i++) prevFoot[i] = foot[i];
+		for (int i = 0; i < LEGS; i++) {
+			prevFoot[i] = foot[i];
+			prevTilt[i] = tilt[i];
+		}
 		prevGroundOffset = groundOffset;
 		prevPitch = pitch;
 		prevRoll = roll;
@@ -172,7 +264,7 @@ public class SpindleLegState {
 			if (t >= 1f) {
 				stepping[i] = false;
 				foot[i] = to[i];
-				footfall(e, to[i]);
+				if (!e.isDead()) footfall(e, to[i]);
 			}
 		}
 
@@ -186,9 +278,9 @@ public class SpindleLegState {
 		java.util.Arrays.sort(order, (a, b) -> Double.compare(err[b], err[a]));
 		boolean idle = vel.horizontalLengthSquared() < 1e-4;
 		for (int i : order) {
-			if (stepping[i]) continue;
-			// A foot that's out of reach (or we just folded/unfolded) steps right away, no waiting its turn.
-			boolean urgent = replantAll || (foot[i].distanceTo(hip[i]) > reach && foot[i].distanceTo(home[i]) > 0.5);
+			if (stepping[i] || e.isDead()) continue;
+			// A foot that's out of reach (or the body just changed size) steps right away, no waiting its turn.
+			boolean urgent = (replantAll && err[i] > 0.3) || (foot[i].distanceTo(hip[i]) > reach && err[i] > 0.5);
 			if (urgent) {
 				startStep(i, home[i]);
 				continue;
@@ -199,9 +291,29 @@ public class SpindleLegState {
 			} else if (idle && e.getRandom().nextFloat() < 0.003f) {
 				// Idle twitch: lift a leg and set it back down a little off.
 				Vec3d j = home[i].add((e.getRandom().nextFloat() - 0.5f) * 0.6, 0, (e.getRandom().nextFloat() - 0.5f) * 0.6);
-				double jy = hanging ? ceilingAt(world, j.x, j.z, pos.y + 2 * SpindleEntity.HANG_PIVOT) : groundAt(world, j.x, j.z, pos.y, folded);
+				double jy = hanging ? ceilingAt(world, j.x, j.z, ceilRef) : groundAt(world, j.x, j.z, pos.y, low);
 				if (!Double.isNaN(jy)) startStep(i, new Vec3d(j.x, jy, j.z));
 			}
+		}
+
+		// Knees: swing each one sideways just far enough that the leg clears walls and ceilings.
+		for (int i = 0; i < LEGS; i++) {
+			Vec3d side = modelDirToWorld(sideHintModel(i), e.bodyYaw, false);
+			float sign = tiltTarget[i] < 0 ? -1f : 1f;
+			float chosen = tiltTarget[i];
+			search:
+			for (float step : TILT_STEPS) {
+				for (int k = 0; k < (step == 0f ? 1 : 2); k++) {
+					float candidate = step * (k == 0 ? sign : -sign);
+					Vec3d knee = solveKnee(hip[i], foot[i], l1, l2, up, side, candidate);
+					if (!segmentBlocked(world, hip[i], knee, 0.7, 0) && !segmentBlocked(world, knee, foot[i], 0, 0.45)) {
+						chosen = candidate;
+						break search;
+					}
+				}
+			}
+			tiltTarget[i] = chosen;
+			tilt[i] += (chosen - tilt[i]) * 0.35f;
 		}
 
 		// Body rides at the average foot height and tilts with the ground.
@@ -214,10 +326,15 @@ public class SpindleLegState {
 			if (i % 3 == 2) rear += y;
 			if (i < 3) right += y; else left += y;
 		}
-		float targetOffset = (float) MathHelper.clamp(sum / LEGS, -2.5, 2.5);
+		// It can sink toward low ground, but never rises above what the server said there's room for.
+		float targetOffset = (float) MathHelper.clamp(sum / LEGS, -2.5, low ? 0.0 : 1.0);
 		float span = Math.max(1f, radius / 16f * 1.4f);
 		float targetPitch = (float) MathHelper.clamp(Math.atan2((front - rear) / 2.0, span), -0.3, 0.3);
 		float targetRoll = (float) MathHelper.clamp(Math.atan2((right - left) / 3.0, span), -0.3, 0.3);
+		if (low) {
+			targetPitch *= 0.3f;
+			targetRoll *= 0.3f;
+		}
 		groundOffset += (targetOffset - groundOffset) * 0.25f;
 		pitch += (targetPitch - pitch) * 0.2f;
 		roll += (targetRoll - roll) * 0.2f;
@@ -242,112 +359,117 @@ public class SpindleLegState {
 
 	private static void footfall(SpindleEntity e, Vec3d at) {
 		float volume = switch (e.getSyncedMode()) {
-			case HUNT -> 0.7f;
-			case STALK -> 0.05f;
-			default -> 0.25f;
+			case HUNT -> 0.8f;
+			case STALK -> 0.06f;
+			default -> 0.3f;
 		};
-		e.getWorld().playSound(at.x, at.y, at.z, SoundEvents.ENTITY_SPIDER_STEP, SoundCategory.HOSTILE,
-				volume, 0.4f + e.getRandom().nextFloat() * 0.15f, false);
+		e.getWorld().playSound(at.x, at.y, at.z, SpindleSounds.STEP, SoundCategory.HOSTILE,
+				volume, 0.5f + e.getRandom().nextFloat() * 0.2f, false);
 	}
 
+	// ---------------------------------------------------------------- world queries
+
 	/**
-	 * Height of the walkable surface under (x, z): a solid top with open space above it.
-	 * Standing (huge): the highest such surface from a few blocks above its feet down to 10 below, so feet
-	 * go on roofs, ledges and tree tops rather than through them. Folded (in tunnels): the surface nearest
-	 * its own height, so feet stay on the cave floor instead of climbing through the ceiling.
+	 * Height of the floor at (x, z) at about the given level: the block it would step onto if there's
+	 * a ledge there, otherwise the first surface below. Returns NaN where a foot can't go (inside a wall).
 	 */
-	public static double groundAt(World world, double x, double z, double refY, boolean folded) {
-		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refY);
+	public static double groundAt(World world, double x, double z, double refY, boolean low) {
+		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refY + 0.01);
 		BlockPos.Mutable m = new BlockPos.Mutable();
 		m.set(bx, by, bz);
 		if (isSolid(world, m)) {
-			// A wall or a step at body level: only accept a low ledge it could step onto.
-			for (int y = by; y <= by + 2; y++) {
+			for (int y = by; y <= by + (low ? 1 : 2); y++) {
 				double top = walkableTop(world, m, bx, y, bz);
-				if (top != Double.NEGATIVE_INFINITY) return top;
+				if (!Double.isNaN(top)) return top;
 			}
 			return Double.NaN;
 		}
-		if (!folded) {
-			// Open here. Look no higher than the local ceiling (never on the floor upstairs), then down.
-			int top = by;
-			while (top < by + 4) {
-				m.set(bx, top + 1, bz);
-				if (isSolid(world, m)) break;
-				top++;
-			}
-			for (int y = top; y >= by - 10; y--) {
-				double t = walkableTop(world, m, bx, y, bz);
-				if (t != Double.NEGATIVE_INFINITY) return t;
-			}
-			return by - 10;
-		}
-		for (int d = 1; d <= 3; d++) {
+		for (int d = 1; d <= (low ? 3 : 10); d++) {
 			double t = walkableTop(world, m, bx, by - d, bz);
-			if (t != Double.NEGATIVE_INFINITY) return t;
+			if (!Double.isNaN(t)) return t;
 		}
 		return Double.NaN;
 	}
 
-	/** Clear line between two points (no blocks with collision in between). */
-	private static boolean clearLine(World world, SpindleEntity e, Vec3d a, Vec3d b) {
-		return world.raycast(new net.minecraft.world.RaycastContext(a, b, net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
-				net.minecraft.world.RaycastContext.FluidHandling.NONE, e)).getType() == net.minecraft.util.hit.HitResult.Type.MISS;
+	/** The top of whatever stands at (x, z) above its feet: a roof, a wall top, a cliff edge. NaN if nothing. */
+	public static double highSurfaceAt(World world, double x, double z, double refY) {
+		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refY + 0.01);
+		BlockPos.Mutable m = new BlockPos.Mutable();
+		for (int y = by + 8; y > by; y--) {
+			double t = walkableTop(world, m, bx, y, bz);
+			if (!Double.isNaN(t)) return t;
+		}
+		return Double.NaN;
 	}
 
-	/** 1 = room to stand at full height, 0 = only room folded. Based on the lowest ceiling right around it. */
-	private static float headroomPosture(World world, Vec3d pos) {
-		int y0 = MathHelper.floor(pos.y);
-		int minH = 10;
-		BlockPos.Mutable m = new BlockPos.Mutable();
-		double[][] offs = {{0, 0}, {1.4, 0}, {-1.4, 0}, {0, 1.4}, {0, -1.4}};
-		for (double[] o : offs) {
-			int bx = MathHelper.floor(pos.x + o[0]), bz = MathHelper.floor(pos.z + o[1]);
-			m.set(bx, y0 + 1, bz);
-			if (isSolid(world, m) && (o[0] != 0 || o[1] != 0)) continue; // that's a wall, not a ceiling
-			int h = 0;
-			for (int y = y0; y <= y0 + 9; y++) {
-				m.set(bx, y, bz);
-				if (isSolid(world, m)) break;
-				h++;
-			}
-			minH = Math.min(minH, h);
+	/** Can a leg get from this hip to this foot spot without passing through anything solid? */
+	private static boolean legCanReach(World world, Vec3d hip, Vec3d foot, double l1, double l2, Vec3d up, Vec3d side) {
+		for (float t : new float[]{0f, 0.8f, -0.8f, 1.5f, -1.5f}) {
+			Vec3d knee = solveKnee(hip, foot, l1, l2, up, side, t);
+			if (!segmentBlocked(world, hip, knee, 0.7, 0) && !segmentBlocked(world, knee, foot, 0, 0.45)) return true;
 		}
-		return MathHelper.clamp((minH - 2.2f) / 5.7f, 0f, 1f);
+		return false;
 	}
 
 	private static double walkableTop(World world, BlockPos.Mutable m, int x, int y, int z) {
 		m.set(x, y, z);
-		double top = surfaceTop(world, m);
-		if (top == Double.NEGATIVE_INFINITY) return top;
+		BlockState st = world.getBlockState(m);
+		if (st.isAir() || st.isIn(BlockTags.LEAVES)) return Double.NaN;
+		VoxelShape shape = st.getCollisionShape(world, m);
+		if (shape.isEmpty()) return Double.NaN;
+		double top = y + shape.getMax(Direction.Axis.Y);
 		m.set(x, y + 1, z);
-		return isSolid(world, m) ? Double.NEGATIVE_INFINITY : top;
+		return isSolid(world, m) ? Double.NaN : top;
 	}
 
-	/** Underside of the ceiling above (x, z): a solid block with a flat bottom and open space below it. */
+	/** Underside of the ceiling above (x, z): a solid block with open space below it. */
 	public static double ceilingAt(World world, double x, double z, double refTop) {
-		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refTop);
+		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refTop + 0.01);
 		BlockPos.Mutable m = new BlockPos.Mutable();
-		for (int y = by - 1; y <= by + 4; y++) {
+		for (int y = by - 1; y <= by + 3; y++) {
 			m.set(bx, y, bz);
-			VoxelShape shape = world.getBlockState(m).getCollisionShape(world, m);
+			BlockState st = world.getBlockState(m);
+			if (st.isAir() || st.isIn(BlockTags.LEAVES)) continue;
+			VoxelShape shape = st.getCollisionShape(world, m);
 			if (shape.isEmpty()) continue;
 			m.set(bx, y - 1, bz);
 			if (isSolid(world, m)) continue;
 			return y + shape.getMin(Direction.Axis.Y);
 		}
-		return refTop;
+		return Double.NaN;
 	}
 
-	private static double surfaceTop(World world, BlockPos pos) {
-		BlockState st = world.getBlockState(pos);
-		VoxelShape shape = st.getCollisionShape(world, pos);
-		if (shape.isEmpty()) return Double.NEGATIVE_INFINITY;
-		return pos.getY() + shape.getMax(Direction.Axis.Y);
-	}
-
+	/** Solid as far as legs are concerned. Leaves don't count: it wades through foliage. */
 	private static boolean isSolid(World world, BlockPos pos) {
-		VoxelShape shape = world.getBlockState(pos).getCollisionShape(world, pos);
+		BlockState st = world.getBlockState(pos);
+		if (st.isAir() || st.isIn(BlockTags.LEAVES)) return false;
+		VoxelShape shape = st.getCollisionShape(world, pos);
 		return !shape.isEmpty() && shape.getMax(Direction.Axis.Y) > 0.5;
+	}
+
+	/**
+	 * Does the straight segment a-b pass through anything solid? The first skipStart and last skipEnd
+	 * blocks of it are ignored (where it leaves the body / touches the ground).
+	 */
+	public static boolean segmentBlocked(World world, Vec3d a, Vec3d b, double skipStart, double skipEnd) {
+		Vec3d d = b.subtract(a);
+		double len = d.length();
+		if (len - skipStart - skipEnd < 0.1) return false;
+		int steps = Math.max(1, (int) Math.ceil((len - skipStart - skipEnd) / 0.33));
+		BlockPos.Mutable m = new BlockPos.Mutable();
+		for (int i = 0; i <= steps; i++) {
+			double t = (skipStart + (len - skipStart - skipEnd) * i / steps) / len;
+			double x = a.x + d.x * t, y = a.y + d.y * t, z = a.z + d.z * t;
+			m.set(MathHelper.floor(x), MathHelper.floor(y), MathHelper.floor(z));
+			BlockState st = world.getBlockState(m);
+			if (st.isAir() || st.isIn(BlockTags.LEAVES)) continue;
+			VoxelShape shape = st.getCollisionShape(world, m);
+			if (shape.isEmpty()) continue;
+			double lx = x - m.getX(), ly = y - m.getY(), lz = z - m.getZ();
+			if (lx >= shape.getMin(Direction.Axis.X) && lx <= shape.getMax(Direction.Axis.X)
+					&& ly >= shape.getMin(Direction.Axis.Y) && ly <= shape.getMax(Direction.Axis.Y)
+					&& lz >= shape.getMin(Direction.Axis.Z) && lz <= shape.getMax(Direction.Axis.Z)) return true;
+		}
+		return false;
 	}
 }

@@ -148,7 +148,7 @@ public class TendrilController {
 		this.extendSpeed = 0.85;
 		this.tip = owner.getCorePos();
 		this.state = State.EXTENDING;
-		owner.playSound(SoundEvents.BLOCK_SCULK_VEIN_PLACE, 1.2f, 0.5f);
+		owner.playSound(SpindleSounds.REACH, 1.2f, 0.5f);
 	}
 
 	/** Reach out and touch a block (used to snuff out lights). */
@@ -174,6 +174,15 @@ public class TendrilController {
 	public boolean beginSearch(Vec3d roughCenter) {
 		Vec3d core = owner.getCorePos();
 		Vec3d entry = findOpening(core, roughCenter, false, MAX_LENGTH);
+		if (entry == null) {
+			// Already inside the same cave or building: no window needed, it just uncoils from where it stands.
+			Vec3d toward = roughCenter.subtract(core);
+			double len = toward.length();
+			if (len > 2.5 && owner.isEnclosed(owner.getPos())) {
+				Vec3d start = core.add(toward.multiply(1.5 / len));
+				if (isTendrilPassable(BlockPos.ofFloored(start)) && passable(core, start)) entry = start;
+			}
+		}
 		if (entry == null) return false;
 		owner.rememberEntry(entry);
 		SearchArea a = SearchArea.build(this, BlockPos.ofFloored(entry), roughCenter);
@@ -188,6 +197,7 @@ public class TendrilController {
 		this.maxVisits = 6 + owner.getRandom().nextInt(4);
 		this.mumbleTimer = 10;
 		owner.playSound(SpindleSounds.PROBE_SERVO, 1.0f, 0.8f);
+		owner.statProbeSearches++;
 		return true;
 	}
 
@@ -432,7 +442,8 @@ public class TendrilController {
 			Vec3d a = Vec3d.ofCenter(chain.get(i));
 			Vec3d b = Vec3d.ofCenter(chain.get(i + 1));
 			Vec3d d = b.subtract(a);
-			if (prevDir == null || !d.equals(prevDir)) pts.add(a); // keep corners only
+			boolean corner = prevDir == null || !d.equals(prevDir);
+			if (corner && (pts.isEmpty() || pts.get(pts.size() - 1).squaredDistanceTo(a) > 0.04)) pts.add(a);
 			prevDir = d;
 		}
 		anchors.clear();
@@ -447,7 +458,7 @@ public class TendrilController {
 			double d = p.getEyePos().distanceTo(tip);
 			if (d > 14) continue;
 			Vec3d chest = p.getPos().add(0, p.getHeight() * 0.6, 0);
-			double moved = new Vec3d(p.getX() - p.prevX, 0, p.getZ() - p.prevZ).length();
+			double moved = owner.getPlayerSpeed(p);
 
 			if (d < 1.4) { // it bumped into you
 				spot(world, p);
@@ -497,6 +508,8 @@ public class TendrilController {
 		spotted = p;
 		spottedTicks = 0;
 		state = State.SPOTTED;
+		owner.statProbeSpots++;
+		owner.noticeTarget(p);
 		look = p.getEyePos().subtract(tip).normalize();
 		world.playSound(null, tip.x, tip.y, tip.z, SpindleSounds.PROBE_FOUND, SoundCategory.HOSTILE, 1.6f, 1.0f);
 	}
@@ -529,24 +542,26 @@ public class TendrilController {
 	// ---------------------------------------------------------------- contact / holding
 
 	private void onContact(ServerWorld world, LivingEntity victim) {
+		owner.noticeTarget(victim);
 		owner.onTendrilContact();
 		if (victim instanceof PlayerEntity player && !player.getMainHandStack().isEmpty() && owner.getRandom().nextFloat() < 0.3f) {
 			ItemStack taken = player.getMainHandStack().copy();
 			player.setStackInHand(Hand.MAIN_HAND, ItemStack.EMPTY);
 			owner.addStolen(player.getUuid(), taken);
 			world.playSound(null, player.getX(), player.getY(), player.getZ(),
-					SoundEvents.ENTITY_FISHING_BOBBER_RETRIEVE, SoundCategory.HOSTILE, 1.5f, 0.5f);
+					SpindleSounds.STEAL, SoundCategory.HOSTILE, 1.5f, 0.5f);
 			startRetract();
 			return;
 		}
 		grabbed = victim;
+		owner.statGrabs++;
 		state = State.HOLDING;
 		holdTicks = 0;
 		pullIndex = anchors.size() - 1;
 		lastGrabbedPos = victim.getPos();
 		victim.damage(owner.getDamageSources().mobAttack(owner), 3.0f);
 		world.playSound(null, victim.getX(), victim.getY(), victim.getZ(),
-				SoundEvents.ENTITY_EVOKER_FANGS_ATTACK, SoundCategory.HOSTILE, 1.2f, 0.6f);
+				SpindleSounds.GRAB, SoundCategory.HOSTILE, 1.2f, 0.6f);
 	}
 
 	private void tickHolding(ServerWorld world) {
@@ -604,7 +619,7 @@ public class TendrilController {
 		lastGrabbedPos = g.getPos();
 		if (stuckTicks > 12) {
 			g.damage(owner.getDamageSources().mobAttack(owner), 4.0f);
-			world.playSound(null, g.getX(), g.getY(), g.getZ(), SoundEvents.ENTITY_IRON_GOLEM_ATTACK, SoundCategory.HOSTILE, 1.0f, 0.6f);
+			world.playSound(null, g.getX(), g.getY(), g.getZ(), SpindleSounds.SLAM, SoundCategory.HOSTILE, 1.0f, 0.6f);
 			release(false);
 			return;
 		}
@@ -652,7 +667,7 @@ public class TendrilController {
 	}
 
 	private void release(boolean snapped) {
-		if (snapped) owner.playSound(SoundEvents.BLOCK_WEEPING_VINES_BREAK, 1.5f, 0.5f);
+		if (snapped) owner.playSound(SpindleSounds.SNAP, 1.5f, 0.5f);
 		startRetract();
 		cooldown = snapped ? 160 : 80;
 	}

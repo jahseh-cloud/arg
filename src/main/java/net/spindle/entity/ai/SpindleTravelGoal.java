@@ -16,7 +16,6 @@ public class SpindleTravelGoal extends Goal {
 	private final SpindleEntity spindle;
 	@Nullable private PlayerEntity quarry;
 	private int repathTimer;
-	private int stuck;
 
 	public SpindleTravelGoal(SpindleEntity spindle) {
 		this.spindle = spindle;
@@ -63,11 +62,7 @@ public class SpindleTravelGoal extends Goal {
 		Vec3d aim = here.add(flat.multiply(hop / dist));
 		Vec3d spot = spindle.randomGroundNear(new Vec3d(aim.x, here.y, aim.z), 0, 6);
 		if (spot == null) spot = spindle.randomGroundNear(new Vec3d(aim.x, quarry.getY(), aim.z), 0, 8);
-		if (spot == null) {
-			stuck++;
-			return;
-		}
-		stuck = 0;
+		if (spot == null) return;
 		boolean ok = spindle.travelTo(spot, 1.1);
 		if (!ok) repathTimer = 5;
 	}

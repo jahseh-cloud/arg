@@ -2,9 +2,9 @@ package net.spindle.entity.ai;
 
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.Goal;
-import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.spindle.SpindleSounds;
 import net.spindle.entity.SpaceMap;
 import net.spindle.entity.SpindleEntity;
 import org.jetbrains.annotations.Nullable;
@@ -71,13 +71,13 @@ public class SpindleLurkGoal extends Goal {
 			if (spindle.getWorld().getLightLevel(c.up(h - 1)) < 5) score += 4;
 			if (score <= bestScore) continue;
 			Vec3d hangSpot = cv.add(0, h - 1.0, 0);
-			if (spindle.isSpotVisibleToAnyone(cv) || spindle.isSpotVisibleToAnyone(hangSpot)) continue;
+			if (!spindle.isSpotHidden(cv) || !spindle.isSpotHidden(hangSpot)) continue;
 			bestScore = score;
 			best = c;
 		}
 		if (best == null) return false;
 		floorCell = best;
-		hangY = best.getY() + SpaceMap.ceilingHeight(spindle.getWorld(), best) - SpindleEntity.FOLDED_HEIGHT;
+		hangY = best.getY() + SpaceMap.ceilingHeight(spindle.getWorld(), best) - SpindleEntity.MIN_HEIGHT;
 		phase = Phase.GO;
 		return true;
 	}
@@ -139,7 +139,7 @@ public class SpindleLurkGoal extends Goal {
 				spindle.setPosition(spindle.getX(), y, spindle.getZ());
 				if (y >= hangY - 1e-3) {
 					phase = Phase.HANG;
-					spindle.playSound(SoundEvents.BLOCK_CHAIN_PLACE, 0.4f, 0.4f);
+					spindle.playSound(SpindleSounds.SHIFT, 0.4f, 0.4f);
 				}
 			}
 			case HANG -> {
@@ -162,7 +162,6 @@ public class SpindleLurkGoal extends Goal {
 		spindle.setHanging(false);
 		spindle.setVelocity(dx * 0.15, -0.3, dz * 0.15);
 		spindle.velocityModified = true;
-		spindle.playSound(SoundEvents.ENTITY_SPIDER_AMBIENT, 2.0f, 0.3f);
 		spindle.startHunt();
 	}
 }

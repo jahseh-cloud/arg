@@ -22,11 +22,11 @@ import net.spindle.entity.SpindleEntity;
  */
 public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 	private static final int LEGS_PER_SIDE = 3;
-	private static final float UPPER_LEN = 84f;
-	private static final float LOWER_LEN = 120f;
+	private static final float UPPER_LEN = SpindleLegState.UPPER_LEN;
+	private static final float LOWER_LEN = SpindleLegState.LOWER_LEN;
+	private static final Vec3d MODEL_UP = new Vec3d(0, -1, 0);
 	private static final float ARM_UPPER_LEN = 30f;
 	private static final float ARM_LOWER_LEN = 36f;
-	private static final float[] HIP_Z = {-9f, 0f, 9f};
 
 	private final ModelPart root;
 	private final ModelPart body;
@@ -121,24 +121,23 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 		tendril.visible = false;
 		probeSeg.visible = probeRing.visible = probeHead.visible = probeLens.visible = probePetal.visible = false;
 
-		float fold = MathHelper.lerp(tickDelta, entity.legs.prevVisualFold, entity.legs.visualFold);
-		float legScale = MathHelper.lerp(fold, 1.0f, 0.3f);
-		float speed = Math.min(1.0f, limbDistance * 1.6f);
+		SpindleLegState legs = entity.legs;
+		float fold = legs.isReady() ? MathHelper.lerp(tickDelta, legs.prevVisualFold, legs.visualFold) : entity.getFold();
+		float legScale = SpindleLegState.legScale(fold);
 		float attack = entity.attackAnimTicks > 0 ? (entity.attackAnimTicks - tickDelta) / 12f : 0f;
 		attack = MathHelper.clamp(attack, 0f, 1f);
 		float strike = MathHelper.sin(attack * (float) Math.PI);
+		boolean dead = entity.isDead();
 
 		// Body: hangs high between the legs at the average height of its feet, tilts with the ground, breathes.
-		SpindleLegState legs = entity.legs;
 		float groundOff = MathHelper.lerp(tickDelta, legs.prevGroundOffset, legs.groundOffset);
 		float tiltPitch = MathHelper.lerp(tickDelta, legs.prevPitch, legs.pitch);
 		float tiltRoll = MathHelper.lerp(tickDelta, legs.prevRoll, legs.roll);
-		float breathe = MathHelper.sin(animationProgress * 0.06f) * 1.2f;
-		float stepBob = Math.abs(MathHelper.sin(limbAngle * 0.6f)) * 2f * speed;
-		float bodyY = MathHelper.lerp(fold, -60f, 6f) - groundOff * 16f + breathe + stepBob + strike * 6f;
+		float breathe = dead ? 0f : MathHelper.sin(animationProgress * 0.06f) * 1.2f * (1f - fold * 0.6f);
+		float bodyY = SpindleLegState.bodyModelY(fold) - groundOff * 16f + breathe + strike * 6f * legScale;
 		body.pivotY = bodyY;
 		coreBottomY = bodyY + 12f; // core part: pivot +5, 7 tall
-		body.pitch = strike * 0.35f + MathHelper.sin(animationProgress * 0.04f) * 0.03f - tiltPitch;
+		body.pitch = strike * 0.35f + (dead ? 0f : MathHelper.sin(animationProgress * 0.04f) * 0.03f) - tiltPitch;
 		body.roll = -tiltRoll;
 		body.yaw = 0f;
 
@@ -150,25 +149,23 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 		for (int i = 0; i < SpindleLegState.LEGS; i++) {
 			float s = i < 3 ? 1f : -1f;
 			int k = i % 3;
-			float hipX = s * 8f;
-			float hipZ = HIP_Z[k];
+			float hipX = s * SpindleLegState.HIP_X;
+			float hipZ = SpindleLegState.HIP_Z[k];
 			// Hips follow the body's tilt a little so legs stay attached.
 			float hipY = bodyY + 3f + hipZ * tiltPitch - hipX * tiltRoll;
 
-			float fx, fy, fz;
+			Vec3d footModel;
+			float kneeTilt = 0f;
 			if (legs.isReady()) {
 				Vec3d footWorld = legs.prevFoot[i].lerp(legs.foot[i], tickDelta);
-				Vec3d m = SpindleLegState.worldToModel(footWorld.subtract(base), bodyYaw, entity.isHanging());
-				fx = (float) m.x;
-				fy = (float) m.y;
-				fz = (float) m.z;
+				footModel = SpindleLegState.worldToModel(footWorld.subtract(base), bodyYaw, entity.isHanging());
+				kneeTilt = MathHelper.lerp(tickDelta, legs.prevTilt[i], legs.tilt[i]);
 			} else {
 				float radius = SpindleLegState.restRadius(fold);
-				fx = SpindleLegState.restModelX(i, radius);
-				fy = 24f;
-				fz = SpindleLegState.restModelZ(i, radius);
+				footModel = new Vec3d(SpindleLegState.restModelX(i, radius), 24f, SpindleLegState.restModelZ(i, radius));
 			}
-			solveLeg(upper[i], lower[i], hipX, hipY, hipZ, fx, fy, fz, l1, l2, legScale);
+			poseLeg(upper[i], lower[i], new Vec3d(hipX, hipY, hipZ), footModel, l1, l2,
+					SpindleLegState.sideHintModel(i), kneeTilt, legScale);
 		}
 
 		// Front arms: tucked under the body, thrown forward to strike, raised while the tendril is out.
@@ -183,50 +180,36 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 				tz = -40f * legScale;
 			}
 			tx = MathHelper.lerp(strike, tx, s * 3f);
-			ty = MathHelper.lerp(strike, ty, 22f - groundOff * 16f);
+			ty = MathHelper.lerp(strike, ty, Math.min(22f, bodyY + 60f * legScale));
 			tz = MathHelper.lerp(strike, tz, -56f * legScale);
-			ty += MathHelper.sin(animationProgress * 0.08f + side) * 1.5f;
-			solveLeg(armUpper[side], armLower[side], hipX, hipY, hipZ, tx, ty, tz,
-					ARM_UPPER_LEN * legScale, ARM_LOWER_LEN * legScale, legScale);
+			if (!dead) ty += MathHelper.sin(animationProgress * 0.08f + side) * 1.5f;
+			poseLeg(armUpper[side], armLower[side], new Vec3d(hipX, hipY, hipZ), new Vec3d(tx, ty, tz),
+					ARM_UPPER_LEN * legScale, ARM_LOWER_LEN * legScale, new Vec3d(s, 0, 0), 0f, legScale);
 		}
 	}
 
 	/**
-	 * Two-bone IK in model space. Bones are modelled along +Z, so: yaw aims the leg horizontally and
-	 * pitch (positive = up) raises it. The knee always bends upward like a harvestman's.
+	 * Two-bone IK. Bones are modelled along +Z; each is simply aimed along its segment
+	 * (hip to knee, knee to foot). The knee comes from the same solver the leg planner uses.
 	 */
-	private static void solveLeg(ModelPart up, ModelPart low, float hx, float hy, float hz,
-								 float fx, float fy, float fz, float l1, float l2, float scale) {
-		float dx = fx - hx;
-		float dy = fy - hy; // positive = foot is below the hip
-		float dz = fz - hz;
-		float h = MathHelper.sqrt(dx * dx + dz * dz);
-		float yaw = (float) Math.atan2(dx, dz);
-		float dist = MathHelper.sqrt(h * h + dy * dy);
-		dist = MathHelper.clamp(dist, Math.abs(l1 - l2) + 0.01f, l1 + l2 - 0.01f);
+	private static void poseLeg(ModelPart up, ModelPart low, Vec3d hip, Vec3d foot, float l1, float l2,
+								Vec3d sideHint, float kneeTilt, float scale) {
+		Vec3d knee = SpindleLegState.solveKnee(hip, foot, l1, l2, MODEL_UP, sideHint, kneeTilt);
+		aim(up, hip, knee, scale);
+		aim(low, knee, foot, scale);
+	}
 
-		float below = (float) Math.atan2(dy, h);
-		float hipAngle = (float) Math.acos(MathHelper.clamp((l1 * l1 + dist * dist - l2 * l2) / (2f * l1 * dist), -1f, 1f));
-		float kneeAngle = (float) Math.acos(MathHelper.clamp((l1 * l1 + l2 * l2 - dist * dist) / (2f * l1 * l2), -1f, 1f));
-
-		float upperPitch = hipAngle - below;
-		float lowerPitch = upperPitch - ((float) Math.PI - kneeAngle);
-
-		up.pivotX = hx;
-		up.pivotY = hy;
-		up.pivotZ = hz;
-		up.yaw = yaw;
-		up.pitch = upperPitch;
-		up.roll = 0f;
-		up.zScale = scale;
-
-		float horiz = l1 * MathHelper.cos(upperPitch);
-		low.pivotX = hx + horiz * MathHelper.sin(yaw);
-		low.pivotY = hy - l1 * MathHelper.sin(upperPitch);
-		low.pivotZ = hz + horiz * MathHelper.cos(yaw);
-		low.yaw = yaw;
-		low.pitch = lowerPitch;
-		low.roll = 0f;
-		low.zScale = scale;
+	private static void aim(ModelPart part, Vec3d from, Vec3d to, float scale) {
+		Vec3d d = to.subtract(from);
+		double len = d.length();
+		part.pivotX = (float) from.x;
+		part.pivotY = (float) from.y;
+		part.pivotZ = (float) from.z;
+		if (len > 1e-4) {
+			part.yaw = (float) Math.atan2(d.x, d.z);
+			part.pitch = (float) Math.asin(MathHelper.clamp(-d.y / len, -1.0, 1.0));
+		}
+		part.roll = 0f;
+		part.zScale = scale;
 	}
 }

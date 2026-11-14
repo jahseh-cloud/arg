@@ -3,5 +3,16 @@
 	"item.spindle.spindle_spawn_egg": "Spindle Spawn Egg",
 	"subtitles.spindle.probe_mumble": "Something mumbles",
 	"subtitles.spindle.probe_servo": "Something whirs",
-	"subtitles.spindle.probe_found": "Something shrieks"
+	"subtitles.spindle.probe_found": "Something shrieks",
+	"subtitles.spindle.hiss": "Something clicks",
+	"subtitles.spindle.hurt": "Something recoils",
+	"subtitles.spindle.death": "Something collapses",
+	"subtitles.spindle.step": "Heavy footfall",
+	"subtitles.spindle.shift": "Metal shifts",
+	"subtitles.spindle.reach": "Something uncoils",
+	"subtitles.spindle.grab": "Something grabs hold",
+	"subtitles.spindle.snap": "Something tears loose",
+	"subtitles.spindle.slam": "Heavy impact",
+	"subtitles.spindle.steal": "Something is taken",
+	"commands.spindle.none": "No Spindle within 256 blocks"
 }

@@ -38,11 +38,26 @@ public class SpindleRetreatGoal extends Goal {
 	}
 
 	@Override
+	public boolean shouldRunEveryTick() {
+		return true;
+	}
+
+	@Override
 	public void tick() {
+		// Cornered: it's running, but anyone who gets in its face gets hit.
+		if (spindle.canMeleeNow()) {
+			for (PlayerEntity p : spindle.getWorld().getPlayers()) {
+				if (p.isCreative() || p.isSpectator() || !p.isAlive()) continue;
+				if (spindle.isInMeleeReach(p) && spindle.squaredDistanceTo(p) < 2.6 * 2.6 && spindle.canSee(p)) {
+					spindle.tryAttack(p);
+					break;
+				}
+			}
+		}
 		if (--repathTimer > 0 && spot != null) return;
 		repathTimer = 40;
 
-		boolean hidden = !spindle.isSpotVisibleToAnyone(spindle.getPos()) && nearestPlayerDistance(spindle.getPos()) > 32;
+		boolean hidden = spindle.isSpotHidden(spindle.getPos()) && nearestPlayerDistance(spindle.getPos()) > 32;
 		if (hidden && spindle.getNavigation().isIdle()) return; // stay put, out of sight
 
 		if (!spindle.getWorld().isSkyVisible(spindle.getBlockPos())) {
@@ -59,7 +74,7 @@ public class SpindleRetreatGoal extends Goal {
 					if (nearest < 14) continue;
 					double score = nearest * 0.4 + map.distance(c) * 0.1;
 					if (spindle.getWorld().getLightLevel(c) < 5) score += 6;
-					if (score <= best || spindle.isSpotVisibleToAnyone(cv)) continue;
+					if (score <= best || !spindle.isSpotHidden(cv)) continue;
 					best = score;
 					spot = cv;
 				}
@@ -69,7 +84,7 @@ public class SpindleRetreatGoal extends Goal {
 				double nearest = nearestPlayerDistance(c);
 				if (nearest < 24) return -1e9;
 				double score = nearest * 0.3;
-				if (!spindle.isSpotVisibleToAnyone(c)) score += 20;
+				if (spindle.isSpotHidden(c)) score += 20;
 				return score;
 			});
 		}

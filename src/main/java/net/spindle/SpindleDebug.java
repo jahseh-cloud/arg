@@ -1,19 +1,28 @@
 package net.spindle;
 
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.spindle.entity.SpindleEntity;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
-/** /spindle debug : shows what the nearest Spindle is thinking in your action bar. */
+/**
+ * Operator commands for testing:
+ *   /spindle debug          toggle a readout of what the nearest Spindle is doing (action bar)
+ *   /spindle hunt           the nearest Spindle hunts you right now
+ *   /spindle calm           the nearest Spindle drops everything and wanders
+ *   /spindle tension <0-100>  set how close the nearest Spindle is to hunting
+ */
 public final class SpindleDebug {
 	private static final Set<UUID> WATCHERS = new HashSet<>();
 
@@ -27,30 +36,72 @@ public final class SpindleDebug {
 							if (!on) WATCHERS.remove(p.getUuid());
 							ctx.getSource().sendFeedback(() -> Text.literal("Spindle debug " + (on ? "on" : "off")), false);
 							return 1;
-						}))));
+						}))
+						.then(CommandManager.literal("hunt").executes(ctx -> {
+							ServerPlayerEntity p = ctx.getSource().getPlayerOrThrow();
+							SpindleEntity s = nearest(ctx.getSource(), p);
+							if (s == null) return 0;
+							if (p.isCreative() || p.isSpectator()) {
+								ctx.getSource().sendFeedback(() -> Text.literal("It ignores Creative and Spectator players. Switch to Survival first."), false);
+								return 0;
+							}
+							s.calmDown();
+							s.noticeTarget(p);
+							s.startHunt();
+							ctx.getSource().sendFeedback(() -> Text.literal("It's coming."), false);
+							return 1;
+						}))
+						.then(CommandManager.literal("calm").executes(ctx -> {
+							SpindleEntity s = nearest(ctx.getSource(), ctx.getSource().getPlayerOrThrow());
+							if (s == null) return 0;
+							s.calmDown();
+							ctx.getSource().sendFeedback(() -> Text.literal("Calmed."), false);
+							return 1;
+						}))
+						.then(CommandManager.literal("tension")
+								.then(CommandManager.argument("percent", IntegerArgumentType.integer(0, 100)).executes(ctx -> {
+									SpindleEntity s = nearest(ctx.getSource(), ctx.getSource().getPlayerOrThrow());
+									if (s == null) return 0;
+									int pct = IntegerArgumentType.getInteger(ctx, "percent");
+									s.setTensionFraction(pct / 100f);
+									ctx.getSource().sendFeedback(() -> Text.literal("Tension set to " + pct + "%"), false);
+									return 1;
+								})))));
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			if (WATCHERS.isEmpty() || server.getTicks() % 10 != 0) return;
 			for (UUID id : WATCHERS) {
 				ServerPlayerEntity p = server.getPlayerManager().getPlayer(id);
 				if (p == null) continue;
-				ServerWorld world = p.getServerWorld();
-				SpindleEntity nearest = null;
-				double best = 256 * 256;
-				for (SpindleEntity s : world.getEntitiesByType(Spindle.SPINDLE, e -> true)) {
-					double d = s.squaredDistanceTo(p);
-					if (d < best) {
-						best = d;
-						nearest = s;
-					}
-				}
-				if (nearest == null) {
+				SpindleEntity s = nearest(p.getServerWorld(), p);
+				if (s == null) {
 					p.sendMessage(Text.literal("no spindle within 256").formatted(Formatting.GRAY), true);
-					continue;
+				} else {
+					p.sendMessage(Text.literal(s.debugLine(p)).formatted(Formatting.RED), true);
 				}
-				p.sendMessage(Text.literal(nearest.debugLine(p)).formatted(Formatting.RED), true);
 			}
 		});
+	}
+
+	@Nullable
+	private static SpindleEntity nearest(ServerCommandSource source, ServerPlayerEntity player) {
+		SpindleEntity s = nearest(player.getServerWorld(), player);
+		if (s == null) source.sendFeedback(() -> Text.translatable("commands.spindle.none"), false);
+		return s;
+	}
+
+	@Nullable
+	private static SpindleEntity nearest(ServerWorld world, ServerPlayerEntity player) {
+		SpindleEntity best = null;
+		double bestD = 256 * 256;
+		for (SpindleEntity s : world.getEntitiesByType(Spindle.SPINDLE, e -> e.isAlive())) {
+			double d = s.squaredDistanceTo(player);
+			if (d < bestD) {
+				bestD = d;
+				best = s;
+			}
+		}
+		return best;
 	}
 
 	private SpindleDebug() {

@@ -2,28 +2,154 @@
 	"probe_mumble": {
 		"subtitle": "subtitles.spindle.probe_mumble",
 		"sounds": [
-			{"name": "spindle:probe/mumble1", "attenuation_distance": 20},
-			{"name": "spindle:probe/mumble2", "attenuation_distance": 20},
-			{"name": "spindle:probe/mumble3", "attenuation_distance": 20},
-			{"name": "spindle:probe/mumble4", "attenuation_distance": 20},
-			{"name": "spindle:probe/mumble5", "attenuation_distance": 20},
-			{"name": "spindle:probe/mumble6", "attenuation_distance": 20}
+			{
+				"name": "spindle:probe/mumble1",
+				"attenuation_distance": 20
+			},
+			{
+				"name": "spindle:probe/mumble2",
+				"attenuation_distance": 20
+			},
+			{
+				"name": "spindle:probe/mumble3",
+				"attenuation_distance": 20
+			},
+			{
+				"name": "spindle:probe/mumble4",
+				"attenuation_distance": 20
+			},
+			{
+				"name": "spindle:probe/mumble5",
+				"attenuation_distance": 20
+			},
+			{
+				"name": "spindle:probe/mumble6",
+				"attenuation_distance": 20
+			}
 		]
 	},
 	"probe_servo": {
 		"subtitle": "subtitles.spindle.probe_servo",
 		"sounds": [
-			{"name": "spindle:probe/servo1", "attenuation_distance": 12},
-			{"name": "spindle:probe/servo2", "attenuation_distance": 12},
-			{"name": "spindle:probe/servo3", "attenuation_distance": 12},
-			{"name": "spindle:probe/servo4", "attenuation_distance": 12}
+			{
+				"name": "spindle:probe/servo1",
+				"attenuation_distance": 12
+			},
+			{
+				"name": "spindle:probe/servo2",
+				"attenuation_distance": 12
+			},
+			{
+				"name": "spindle:probe/servo3",
+				"attenuation_distance": 12
+			},
+			{
+				"name": "spindle:probe/servo4",
+				"attenuation_distance": 12
+			}
 		]
 	},
 	"probe_found": {
 		"subtitle": "subtitles.spindle.probe_found",
 		"sounds": [
-			{"name": "spindle:probe/found1", "attenuation_distance": 32},
-			{"name": "spindle:probe/found2", "attenuation_distance": 32}
+			{
+				"name": "spindle:probe/found1",
+				"attenuation_distance": 32
+			},
+			{
+				"name": "spindle:probe/found2",
+				"attenuation_distance": 32
+			}
+		]
+	},
+	"hiss": {
+		"subtitle": "subtitles.spindle.hiss",
+		"sounds": [
+			{
+				"name": "minecraft:entity.spider.ambient",
+				"type": "event"
+			}
+		]
+	},
+	"hurt": {
+		"subtitle": "subtitles.spindle.hurt",
+		"sounds": [
+			{
+				"name": "minecraft:entity.spider.hurt",
+				"type": "event"
+			}
+		]
+	},
+	"death": {
+		"subtitle": "subtitles.spindle.death",
+		"sounds": [
+			{
+				"name": "minecraft:entity.spider.death",
+				"type": "event"
+			}
+		]
+	},
+	"step": {
+		"subtitle": "subtitles.spindle.step",
+		"sounds": [
+			{
+				"name": "minecraft:block.netherite_block.step",
+				"type": "event"
+			}
+		]
+	},
+	"shift": {
+		"subtitle": "subtitles.spindle.shift",
+		"sounds": [
+			{
+				"name": "minecraft:block.chain.place",
+				"type": "event"
+			}
+		]
+	},
+	"reach": {
+		"subtitle": "subtitles.spindle.reach",
+		"sounds": [
+			{
+				"name": "minecraft:block.sculk_vein.place",
+				"type": "event"
+			}
+		]
+	},
+	"grab": {
+		"subtitle": "subtitles.spindle.grab",
+		"sounds": [
+			{
+				"name": "minecraft:entity.evoker_fangs.attack",
+				"type": "event"
+			}
+		]
+	},
+	"snap": {
+		"subtitle": "subtitles.spindle.snap",
+		"sounds": [
+			{
+				"name": "minecraft:block.weeping_vines.break",
+				"type": "event"
+			}
+		]
+	},
+	"slam": {
+		"subtitle": "subtitles.spindle.slam",
+		"sounds": [
+			{
+				"name": "minecraft:entity.iron_golem.attack",
+				"type": "event"
+			}
+		]
+	},
+	"steal": {
+		"subtitle": "subtitles.spindle.steal",
+		"sounds": [
+			{
+				"name": "minecraft:entity.fishing_bobber.retrieve",
+				"type": "event"
+			}
 		]
 	}
 }
