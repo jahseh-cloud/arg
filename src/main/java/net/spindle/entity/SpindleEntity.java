@@ -356,11 +356,6 @@ public class SpindleEntity extends HostileEntity {
 	}
 
 	@Override
-	public boolean canBreatheInWater() {
-		return true;
-	}
-
-	@Override
 	public void slowMovement(BlockState state, Vec3d multiplier) {
 		// Cobwebs, berry bushes and powder snow don't slow it.
 	}
