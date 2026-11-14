@@ -120,6 +120,11 @@ public final class SpaceMap {
 		return -1;
 	}
 
+	/** Is there a roof (any solid, non-leaf block) somewhere above this spot? Doesn't depend on lighting. */
+	public static boolean hasRoof(World world, BlockPos p) {
+		return world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, p.getX(), p.getZ()) > p.getY() + 1;
+	}
+
 	@Nullable
 	public static BlockPos snap(World world, BlockPos p) {
 		for (int dy : new int[]{0, -1, 1, -2, 2, -3}) {

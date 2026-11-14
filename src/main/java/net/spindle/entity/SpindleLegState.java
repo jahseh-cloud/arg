@@ -40,9 +40,15 @@ public class SpindleLegState {
 			(float) Math.toRadians(12), (float) Math.toRadians(160), (float) Math.toRadians(170)
 	};
 	private static final float[] TILT_STEPS = {0f, 0.4f, 0.8f, 1.2f, 1.5f};
+	private static final float[] SHRINK_STEPS = {1f, 0.85f, 0.7f, 0.58f, 0.48f};
 
 	public final Vec3d[] foot = new Vec3d[LEGS];
 	public final Vec3d[] prevFoot = new Vec3d[LEGS];
+	/** Each leg's own length scale: legs telescope shorter where there isn't room for them. */
+	public final float[] scale = new float[LEGS];
+	public final float[] prevScale = new float[LEGS];
+	/** Fold used for the legs. Same as visualFold, except when hanging: legs spread out across the ceiling. */
+	public float legFold, prevLegFold;
 	/** How far each knee is swung sideways out of its upright plane, in radians. */
 	public final float[] tilt = new float[LEGS];
 	public final float[] prevTilt = new float[LEGS];
@@ -68,6 +74,10 @@ public class SpindleLegState {
 	}
 
 	// ---------------------------------------------------------------- shared geometry
+
+	private static float scaleNow(float fold) {
+		return legScale(fold);
+	}
 
 	public static float legScale(float fold) {
 		return MathHelper.lerp(fold, 1.0f, 0.3f);
@@ -172,9 +182,13 @@ public class SpindleLegState {
 		float targetFold = (hanging || e.isDead()) ? 1f : e.getFold();
 		visualFold += (targetFold - visualFold) * (e.isDead() ? 0.12f : 0.3f);
 		if (!initialized) prevVisualFold = visualFold = targetFold;
-		float fold = visualFold;
+		prevLegFold = legFold;
+		float targetLegFold = hanging ? 0.55f : visualFold;
+		legFold += (targetLegFold - legFold) * 0.3f;
+		if (!initialized) prevLegFold = legFold = targetLegFold;
+		float fold = legFold;
 		float radius = restRadius(fold);
-		float scale = legScale(fold);
+		float scale = scaleNow(fold);
 		boolean low = fold > 0.5f;
 		boolean hunting = e.getSyncedMode() == SpindleEntity.Mode.HUNT;
 
@@ -184,7 +198,7 @@ public class SpindleLegState {
 		Vec3d lead = new Vec3d(vel.x, 0, vel.z).multiply(stepDuration * 1.3);
 		double l1 = UPPER_LEN * scale / 16.0, l2 = LOWER_LEN * scale / 16.0;
 		double reach = (l1 + l2) * 0.96;
-		float hipYm = bodyModelY(fold) + 3f - groundOffset * 16f;
+		float hipYm = bodyModelY(visualFold) + 3f - groundOffset * 16f;
 
 		Vec3d[] hip = new Vec3d[LEGS];
 		Vec3d[] home = new Vec3d[LEGS];
@@ -248,6 +262,8 @@ public class SpindleLegState {
 		for (int i = 0; i < LEGS; i++) {
 			prevFoot[i] = foot[i];
 			prevTilt[i] = tilt[i];
+			prevScale[i] = scale[i];
+			if (scale[i] <= 0f) prevScale[i] = scale[i] = scaleNow(fold);
 		}
 		prevGroundOffset = groundOffset;
 		prevPitch = pitch;
@@ -296,24 +312,40 @@ public class SpindleLegState {
 			}
 		}
 
-		// Knees: swing each one sideways just far enough that the leg clears walls and ceilings.
+		// Knees: swing each one sideways, and if that's not enough telescope the leg shorter, until the
+		// whole leg is clear of walls and ceilings.
 		for (int i = 0; i < LEGS; i++) {
 			Vec3d side = modelDirToWorld(sideHintModel(i), e.bodyYaw, false);
 			float sign = tiltTarget[i] < 0 ? -1f : 1f;
-			float chosen = tiltTarget[i];
+			double span = hip[i].distanceTo(foot[i]);
+			float chosenTilt = 0f, chosenScale = -1f;
 			search:
-			for (float step : TILT_STEPS) {
-				for (int k = 0; k < (step == 0f ? 1 : 2); k++) {
-					float candidate = step * (k == 0 ? sign : -sign);
-					Vec3d knee = solveKnee(hip[i], foot[i], l1, l2, up, side, candidate);
-					if (!segmentBlocked(world, hip[i], knee, 0.7, 0) && !segmentBlocked(world, knee, foot[i], 0, 0.45)) {
-						chosen = candidate;
-						break search;
+			for (float shrink : SHRINK_STEPS) {
+				float sc = scale * shrink;
+				double a1 = UPPER_LEN * sc / 16.0, a2 = LOWER_LEN * sc / 16.0;
+				if (a1 + a2 < span * 1.02) {
+					// Can't get any shorter than this and still reach the foot.
+					chosenScale = (float) (span * 1.03 / ((UPPER_LEN + LOWER_LEN) / 16.0));
+					chosenTilt = tiltTarget[i];
+					break;
+				}
+				for (float step : TILT_STEPS) {
+					for (int k = 0; k < (step == 0f ? 1 : 2); k++) {
+						float candidate = step * (k == 0 ? sign : -sign);
+						Vec3d knee = solveKnee(hip[i], foot[i], a1, a2, up, side, candidate);
+						if (!segmentBlocked(world, hip[i], knee, 0.7, 0) && !segmentBlocked(world, knee, foot[i], 0, 0.45)) {
+							chosenTilt = candidate;
+							chosenScale = sc;
+							break search;
+						}
 					}
 				}
 			}
-			tiltTarget[i] = chosen;
-			tilt[i] += (chosen - tilt[i]) * 0.35f;
+			if (chosenScale < 0) chosenScale = scale * SHRINK_STEPS[SHRINK_STEPS.length - 1];
+			tiltTarget[i] = chosenTilt;
+			tilt[i] += (chosenTilt - tilt[i]) * 0.35f;
+			// Shrinking happens fast (no clipping), growing back slowly.
+			scale[i] += (chosenScale - scale[i]) * (chosenScale < scale[i] ? 0.6f : 0.15f);
 		}
 
 		// Body rides at the average foot height and tilts with the ground.
@@ -404,9 +436,13 @@ public class SpindleLegState {
 
 	/** Can a leg get from this hip to this foot spot without passing through anything solid? */
 	private static boolean legCanReach(World world, Vec3d hip, Vec3d foot, double l1, double l2, Vec3d up, Vec3d side) {
-		for (float t : new float[]{0f, 0.8f, -0.8f, 1.5f, -1.5f}) {
-			Vec3d knee = solveKnee(hip, foot, l1, l2, up, side, t);
-			if (!segmentBlocked(world, hip, knee, 0.7, 0) && !segmentBlocked(world, knee, foot, 0, 0.45)) return true;
+		double span = hip.distanceTo(foot);
+		for (float f : SHRINK_STEPS) {
+			if ((l1 + l2) * f < span * 1.02) break;
+			for (float t : new float[]{0f, 0.8f, -0.8f, 1.5f, -1.5f}) {
+				Vec3d knee = solveKnee(hip, foot, l1 * f, l2 * f, up, side, t);
+				if (!segmentBlocked(world, hip, knee, 0.7, 0) && !segmentBlocked(world, knee, foot, 0, 0.45)) return true;
+			}
 		}
 		return false;
 	}

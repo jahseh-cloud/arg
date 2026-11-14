@@ -866,7 +866,7 @@ public class TendrilController {
 					if (a.parent.containsKey(n)) continue;
 					if (Vec3d.ofCenter(n).distanceTo(center) > SEARCH_RADIUS) continue;
 					if (!ctl.isTendrilPassable(n)) continue;
-					if (world.isSkyVisible(n)) continue; // stay indoors
+					if (!SpaceMap.hasRoof(world, n)) continue; // stay indoors
 					a.parent.put(n, cur);
 					a.depth.put(n, a.depth.get(cur) + 1);
 					queue.add(n);

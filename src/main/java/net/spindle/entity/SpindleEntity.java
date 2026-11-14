@@ -562,7 +562,7 @@ public class SpindleEntity extends HostileEntity {
 	}
 
 	public boolean isEnclosed(Vec3d pos) {
-		return !getWorld().isSkyVisible(BlockPos.ofFloored(pos.x, pos.y + 1.0, pos.z));
+		return SpaceMap.hasRoof(getWorld(), BlockPos.ofFloored(pos));
 	}
 
 	public int countPlayersNear(Entity center, double radius) {

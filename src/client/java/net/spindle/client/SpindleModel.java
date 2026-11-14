@@ -123,7 +123,8 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 
 		SpindleLegState legs = entity.legs;
 		float fold = legs.isReady() ? MathHelper.lerp(tickDelta, legs.prevVisualFold, legs.visualFold) : entity.getFold();
-		float legScale = SpindleLegState.legScale(fold);
+		float legFold = legs.isReady() ? MathHelper.lerp(tickDelta, legs.prevLegFold, legs.legFold) : fold;
+		float legScale = SpindleLegState.legScale(legFold);
 		float attack = entity.attackAnimTicks > 0 ? (entity.attackAnimTicks - tickDelta) / 12f : 0f;
 		attack = MathHelper.clamp(attack, 0f, 1f);
 		float strike = MathHelper.sin(attack * (float) Math.PI);
@@ -141,8 +142,6 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 		body.roll = -tiltRoll;
 		body.yaw = 0f;
 
-		float l1 = UPPER_LEN * legScale;
-		float l2 = LOWER_LEN * legScale;
 		Vec3d base = entity.getLerpedPos(tickDelta);
 		float bodyYaw = MathHelper.lerpAngleDegrees(tickDelta, entity.prevBodyYaw, entity.bodyYaw);
 
@@ -156,16 +155,18 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 
 			Vec3d footModel;
 			float kneeTilt = 0f;
+			float sc = legScale;
 			if (legs.isReady()) {
 				Vec3d footWorld = legs.prevFoot[i].lerp(legs.foot[i], tickDelta);
 				footModel = SpindleLegState.worldToModel(footWorld.subtract(base), bodyYaw, entity.isHanging());
 				kneeTilt = MathHelper.lerp(tickDelta, legs.prevTilt[i], legs.tilt[i]);
+				if (legs.scale[i] > 0f) sc = MathHelper.lerp(tickDelta, legs.prevScale[i], legs.scale[i]);
 			} else {
-				float radius = SpindleLegState.restRadius(fold);
+				float radius = SpindleLegState.restRadius(legFold);
 				footModel = new Vec3d(SpindleLegState.restModelX(i, radius), 24f, SpindleLegState.restModelZ(i, radius));
 			}
-			poseLeg(upper[i], lower[i], new Vec3d(hipX, hipY, hipZ), footModel, l1, l2,
-					SpindleLegState.sideHintModel(i), kneeTilt, legScale);
+			poseLeg(upper[i], lower[i], new Vec3d(hipX, hipY, hipZ), footModel, UPPER_LEN * sc, LOWER_LEN * sc,
+					SpindleLegState.sideHintModel(i), kneeTilt, sc);
 		}
 
 		// Front arms: tucked under the body, thrown forward to strike, raised while the tendril is out.
