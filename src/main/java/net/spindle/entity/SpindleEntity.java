@@ -392,7 +392,16 @@ public class SpindleEntity extends HostileEntity {
 		}
 	}
 
+	/** Screenshot harness only: hold whatever pose it's put in (posture and tendril still update). */
+	public boolean posed;
+
 	private void serverTick(ServerWorld world) {
+		if (posed) {
+			updatePosture();
+			tendril.tick(world);
+			this.dataTracker.set(MODE, mode.ordinal());
+			return;
+		}
 		samplePlayers(world);
 		if (this.age % 2 == 0) updateWatchers(world);
 		if (this.age % 20 == 0 && isAlive()) SpindleChunkLoader.get(world).update(world, getUuid(), getChunkPos());
