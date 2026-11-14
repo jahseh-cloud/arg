@@ -397,6 +397,7 @@ public class SpindleEntity extends HostileEntity {
 
 	private void serverTick(ServerWorld world) {
 		if (posed) {
+			if (this.age % 20 == 0) SpindleChunkLoader.get(world).update(world, getUuid(), getChunkPos());
 			updatePosture();
 			tendril.tick(world);
 			this.dataTracker.set(MODE, mode.ordinal());
@@ -1283,6 +1284,7 @@ public class SpindleEntity extends HostileEntity {
 		nbt.putInt("RetreatTicks", retreatTicks);
 		nbt.putFloat("BodyHeight", getBodyHeight());
 		nbt.putBoolean("Hanging", isHanging());
+		if (posed) nbt.putBoolean("Posed", true);
 		NbtList list = new NbtList();
 		for (StolenItem s : stolen) {
 			if (s.stack.isEmpty()) continue;
@@ -1311,6 +1313,7 @@ public class SpindleEntity extends HostileEntity {
 			this.dataTracker.set(HEIGHT, h);
 		}
 		if (nbt.getBoolean("Hanging")) setHanging(true);
+		posed = nbt.getBoolean("Posed");
 		stolen.clear();
 		NbtList list = nbt.getList("Stolen", NbtElement.COMPOUND_TYPE);
 		for (int i = 0; i < list.size(); i++) {
