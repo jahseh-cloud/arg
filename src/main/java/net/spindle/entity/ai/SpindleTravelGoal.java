@@ -16,6 +16,7 @@ public class SpindleTravelGoal extends Goal {
 	private final SpindleEntity spindle;
 	@Nullable private PlayerEntity quarry;
 	private int repathTimer;
+	private int checkTimer;
 
 	public SpindleTravelGoal(SpindleEntity spindle) {
 		this.spindle = spindle;
@@ -25,7 +26,8 @@ public class SpindleTravelGoal extends Goal {
 	@Override
 	public boolean canStart() {
 		if (spindle.getMode() != SpindleEntity.Mode.WANDER || spindle.getTarget() != null) return false;
-		if (spindle.age % 40 != 0) return false;
+		if (--checkTimer > 0) return false;
+		checkTimer = 20; // (goal checks only run every other tick)
 		quarry = pickQuarry();
 		return quarry != null;
 	}

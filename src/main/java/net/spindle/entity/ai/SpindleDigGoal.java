@@ -74,7 +74,7 @@ public class SpindleDigGoal extends Goal {
 		spindle.clearStuck();
 		if (failures > 3 || ticks >= 1200) {
 			// Nothing it can get through here. Don't keep hammering at it.
-			spindle.markUnreachable(false);
+			spindle.markUnreachable(Boolean.FALSE);
 			restTicks = 200;
 		}
 	}
@@ -97,7 +97,7 @@ public class SpindleDigGoal extends Goal {
 			Path path = spindle.getNavigation().findPathTo(dest.x, dest.y, dest.z, 1);
 			if (path != null && path.reachesTarget()) {
 				spindle.clearStuck();
-				spindle.markUnreachable(false);
+				spindle.markUnreachable(Boolean.FALSE);
 				return;
 			}
 		}

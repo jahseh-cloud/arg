@@ -118,6 +118,7 @@ public class SpindleEntity extends HostileEntity {
 	private boolean relocateRequested;
 	private int attackCooldown;
 	private int unreachableTicks;
+	private boolean pathBlocked;
 	private int crouchTicks;
 	private float lastShiftSoundHeight = MAX_HEIGHT;
 	private EntityDimensions dims;
@@ -399,6 +400,11 @@ public class SpindleEntity extends HostileEntity {
 		if (attackCooldown > 0) attackCooldown--;
 		updateMode(world);
 		updateAwareness();
+		if (mode == Mode.HUNT && pathBlocked && isTracking() && !frozen) unreachableTicks++;
+		else if (mode != Mode.HUNT) {
+			unreachableTicks = 0;
+			pathBlocked = false;
+		}
 		if (isHanging() && mode != Mode.STALK) setHanging(false); // drops down to hunt / flee
 		updatePosture();
 		tickStuck();
@@ -714,6 +720,7 @@ public class SpindleEntity extends HostileEntity {
 		tension = HUNT_THRESHOLD * 0.4f;
 		huntTicks = 0;
 		unreachableTicks = 0;
+		pathBlocked = false;
 		relocateRequested = true;
 		tendril.forceRelease();
 		getNavigation().stop();
@@ -801,6 +808,7 @@ public class SpindleEntity extends HostileEntity {
 			if (target != null) lastKnownPos = target.getPos();
 			lostTicks = 0;
 			unreachableTicks = 0;
+		pathBlocked = false;
 		}
 		mode = Mode.HUNT;
 		huntTicks = 0;
@@ -817,6 +825,7 @@ public class SpindleEntity extends HostileEntity {
 		mode = Mode.RETREAT;
 		retreatTicks = ticks;
 		unreachableTicks = 0;
+		pathBlocked = false;
 		clearStuck();
 		tendril.forceRelease();
 		getNavigation().stop();
@@ -1032,12 +1041,18 @@ public class SpindleEntity extends HostileEntity {
 		tension = 0;
 		huntTicks = 0;
 		unreachableTicks = 0;
+		pathBlocked = false;
 		clearStuck();
 		getNavigation().stop();
 	}
 
 	public boolean isWatched() {
 		return watched;
+	}
+
+	/** Watched, and the watcher can actually make it out: it's lit, or they're close. */
+	public boolean isNoticed() {
+		return watched && (lit || nearestWatcherDist < 10);
 	}
 
 	public boolean isFrozen() {
@@ -1050,11 +1065,20 @@ public class SpindleEntity extends HostileEntity {
 		return r;
 	}
 
-	public void markUnreachable(boolean unreachable) {
-		unreachableTicks = unreachable ? unreachableTicks + 1 : 0;
+	/**
+	 * The hunt goal reports what its latest path said: true = it can't walk to the target,
+	 * false = it can. Null = no verdict yet (still walking to the closest spot); keeps the last one.
+	 */
+	public void markUnreachable(@Nullable Boolean unreachable) {
+		if (unreachable == null) return;
+		pathBlocked = unreachable;
+		if (!unreachable) unreachableTicks = 0;
 	}
 
+	/** Seconds-ish it has been unable to walk to its target, counted in ticks. */
+
 	public int getUnreachableTicks() {
+		if (mode != Mode.HUNT) return 0;
 		return unreachableTicks;
 	}
 
@@ -1137,7 +1161,7 @@ public class SpindleEntity extends HostileEntity {
 	public Vec3d getDigDestination() {
 		if (!canGrief() || frozen || isHanging()) return null;
 		if (stuckLevel >= 3 && destination != null) return destination;
-		if (mode == Mode.HUNT && unreachableTicks >= 8) {
+		if (mode == Mode.HUNT && unreachableTicks >= 100) {
 			LivingEntity target = getTarget();
 			if (target == null) return null;
 			Vec3d dest = isTracking() ? target.getPos() : lastKnownPos;

@@ -56,7 +56,7 @@ public class SpindleTendrilGoal extends Goal {
 			if (dist > TendrilController.MAX_LENGTH) return false;
 			// Mostly it just runs you down. It reaches when it can't get to you, when it's squeezed
 			// into a tunnel and slow, or now and then to keep you guessing.
-			boolean want = spindle.getUnreachableTicks() > 2
+			boolean want = spindle.getUnreachableTicks() > 20
 					|| (dist > 5 && spindle.isCrouched() && spindle.getRandom().nextFloat() < 0.12f)
 					|| (dist > 6 && spindle.getRandom().nextFloat() < 0.03f);
 			if (!want) return false;

@@ -89,7 +89,7 @@ public class SpindleHuntGoal extends Goal {
 				PathNode end = path.getEnd();
 				atEnd = end == null || spindle.getBlockPos().getManhattanDistance(end.getBlockPos()) <= 2;
 			}
-			spindle.markUnreachable(!reaches && atEnd);
+			spindle.markUnreachable(reaches ? Boolean.FALSE : (atEnd || spindle.getNavigation().isIdle()) ? Boolean.TRUE : null);
 			spindle.debugNote = path == null ? "path:none" : "path:" + (reaches ? "reaches" : "short") + (atEnd ? "/atEnd" : "/walking") + " len " + path.getLength();
 			if (path != null) spindle.getNavigation().startMovingAlong(path, (reaches ? 1.35 : 1.2) * spindle.getSpeedFactor());
 		}
@@ -105,7 +105,7 @@ public class SpindleHuntGoal extends Goal {
 			spindle.loseTrail();
 			return;
 		}
-		spindle.markUnreachable(false);
+		spindle.markUnreachable(Boolean.FALSE);
 		if (searchPoint == null) {
 			searchPoint = lastKnown;
 			searchStage = 0;

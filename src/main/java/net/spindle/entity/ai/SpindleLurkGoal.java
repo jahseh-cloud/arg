@@ -47,7 +47,7 @@ public class SpindleLurkGoal extends Goal {
 		if (--cooldown > 0) return false;
 		cooldown = 40;
 		if (spindle.getMode() != SpindleEntity.Mode.STALK || target == null) return false;
-		if (spindle.getTensionFraction() < 0.3f || spindle.isWatched()) return false;
+		if (spindle.getTensionFraction() < 0.3f || spindle.isNoticed()) return false;
 		if (spindle.getWorld().isSkyVisible(target.getBlockPos())) return false; // underground / indoors only
 		if (spindle.distanceTo(target) > 40) return false;
 		return pickSpot(target);
@@ -124,7 +124,7 @@ public class SpindleLurkGoal extends Goal {
 				if (floorCell == null) return;
 				Vec3d c = Vec3d.ofBottomCenter(floorCell);
 				if (spindle.getPos().squaredDistanceTo(c) < 1.2 * 1.2) {
-					if (spindle.isWatched()) return; // never climb while someone's looking
+					if (spindle.isNoticed()) return; // never climb while someone can see it
 					spindle.getNavigation().stop();
 					spindle.setPosition(c.x, spindle.getY(), c.z);
 					spindle.setHanging(true);

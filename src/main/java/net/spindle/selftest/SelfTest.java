@@ -80,6 +80,8 @@ public final class SelfTest {
 		SCENARIOS.add(new LurkCeiling());
 		SCENARIOS.add(new Retreat());
 		SCENARIOS.add(new TravelFar());
+		SCENARIOS.add(new MansionCorridor());
+		SCENARIOS.add(new RoughSteps());
 		int i = 0;
 		for (Scenario s : SCENARIOS) {
 			int ox = 1000 + 400 * i++, oz = 1000;
@@ -513,6 +515,58 @@ public final class SelfTest {
 				return "PASS crossed the world and started " + spindle.getMode() + " at t=" + t;
 			}
 			return null;
+		}
+	}
+
+	/** A dark 3-wide, 4-high corridor with a dog-leg, like a woodland mansion hallway. */
+	static class MansionCorridor extends Scenario {
+		int maxStuck;
+		float maxHeightInside;
+
+		MansionCorridor() {
+			super("mansion_corridor", 900);
+		}
+
+		@Override
+		void setup() {
+			BlockState wall = Blocks.DARK_OAK_PLANKS.getDefaultState();
+			Scenes.corridor(world, o.add(6, 0, 0), 4, wall);
+			// a side passage at the far end, so the player can be around a corner
+			Scenes.fill(world, o, 34, 0, 1, 36, 3, 14, wall);
+			Scenes.fill(world, o, 35, 0, 1, 35, 2, 13, Scenes.AIR);
+			spawn(35.5, 12.5, 180f);
+		}
+
+		@Override
+		String check() {
+			if (t == 10) forceHunt();
+			maxStuck = Math.max(maxStuck, spindle.getStuckLevel());
+			double x = spindle.getX() - o.getX();
+			if (x > 8) maxHeightInside = Math.max(maxHeightInside, spindle.getBodyHeight());
+			if (!hurt()) return null;
+			boolean fits = maxHeightInside <= 3.8f;
+			return (fits ? "PASS" : "FAIL too tall for the corridor:") + String.format(" reached the player round the corner at t=%d, tallest inside %.1f, worst stuck level %d", t, maxHeightInside, maxStuck);
+		}
+	}
+
+	/** Steps and a 4-block ledge; the player is on top. It has to find a way up. */
+	static class RoughSteps extends Scenario {
+		RoughSteps() {
+			super("rough_steps", 900);
+		}
+
+		@Override
+		void setup() {
+			Scenes.steps(world, o);
+			spindle = Scenes.spawnSpindle(world, o.getX() + 0.5, o.getY(), o.getZ() + 0.5, -90f);
+			victim = TestPlayer.spawn(world, "t_" + name, at(21.5, 5, 0.5), 90f);
+			victim.patrol(at(18.5, 5, -3.5), at(22.5, 5, 3.5));
+		}
+
+		@Override
+		String check() {
+			if (t == 10) forceHunt();
+			return hurt() ? "PASS climbed up and hit the player at t=" + t : null;
 		}
 	}
 
