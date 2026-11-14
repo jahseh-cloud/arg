@@ -77,14 +77,43 @@ public final class ShotHarness {
 		}
 		Shot s = SHOTS.get(shotIndex);
 		shotTicks++;
+		if (shotTicks % 40 == 0) log("  " + s.name + " t=" + shotTicks + " | " + describe(client, s));
 		if (shotTicks == 20 && s.atStart != null) server.execute(s.atStart);
 		if (shotTicks % 10 == 0) teleport(server, s.camera, s.lookAt.get());
 		boolean timeUp = shotTicks >= s.delay + 200;
 		if (shotTicks >= s.delay && (s.ready.get() || timeUp)) {
 			ScreenshotRecorder.saveScreenshot(client.runDirectory, s.name + ".png", client.getFramebuffer(), msg -> {});
-			log("SAVED " + s.name + (timeUp ? " (timed out waiting)" : ""));
+			log("SAVED " + s.name + (timeUp ? " (timed out waiting)" : "") + " | " + describe(client, s));
 			shotTicks = -1;
 		}
+	}
+
+	/** What the client sees of the Spindle nearest the shot's target. */
+	private static String describe(MinecraftClient client, Shot s) {
+		Vec3d at = s.lookAt.get();
+		SpindleEntity best = null;
+		double bd = 40 * 40;
+		for (Entity e : client.world.getEntities()) {
+			if (e instanceof SpindleEntity sp && sp.squaredDistanceTo(at) < bd) {
+				bd = sp.squaredDistanceTo(at);
+				best = sp;
+			}
+		}
+		if (best == null) return "no spindle near";
+		StringBuilder b = new StringBuilder();
+		b.append(String.format(java.util.Locale.ROOT, "client: h%.1f hanging=%s tendril=%s fold=%.2f legFold=%.2f feet:",
+				best.getBodyHeight(), best.isHanging(), best.getTendrilFlags(), best.legs.visualFold, best.legs.legFold));
+		for (int i = 0; i < 6 && best.legs.isReady(); i++) {
+			Vec3d f = best.legs.foot[i].subtract(best.getPos());
+			b.append(String.format(java.util.Locale.ROOT, " (%.1f %.1f %.1f s%.2f)", f.x, f.y, f.z, best.legs.scale[i]));
+		}
+		MinecraftServer server = client.getServer();
+		if (server != null) {
+			SpindleEntity srv = (SpindleEntity) server.getOverworld().getEntity(best.getUuid());
+			if (srv != null) b.append(" | server: ").append(srv.tendril.getState()).append(" hanging=").append(srv.isHanging())
+					.append(" posed=").append(srv.posed);
+		}
+		return b.toString();
 	}
 
 	private static void teleport(MinecraftServer server, Vec3d cam, Vec3d target) {
@@ -136,7 +165,7 @@ public final class ShotHarness {
 		// 3. mansion corridor, near wall left off
 		BlockPos c = new BlockPos(200, ground, 0);
 		Scenes.corridor(world, c, 4, dark);
-		Scenes.fill(world, c, 0, 0, -2, 31, 4, -2, Scenes.AIR);
+		Scenes.fill(world, c, 0, 0, -2, 31, 3, -2, Blocks.GLASS.getDefaultState());
 		SpindleEntity corridor = posed(world, c.getX() + 15.5, ground, 0.5, -90f);
 		SHOTS.add(new Shot("04_corridor_cutaway", v(c, 15.5, 2.5, -9), () -> corridor.getPos().add(0, 1.5, 0), 80, () -> true));
 		SHOTS.add(new Shot("05_corridor_inside", v(c, 3.5, 1.7, 0.5), () -> corridor.getPos().add(0, 1.8, 0), 40, () -> true));
@@ -144,14 +173,15 @@ public final class ShotHarness {
 		// 4. 1x2 tunnel, cut open on the near side
 		BlockPos d = new BlockPos(300, ground, 0);
 		Scenes.tunnel(world, d, Blocks.STONE.getDefaultState());
-		Scenes.fill(world, d, 10, 0, -2, 42, 1, -1, Scenes.AIR);
+		Scenes.fill(world, d, 10, 0, -2, 42, 3, -2, Blocks.GLASS.getDefaultState());
+		Scenes.fill(world, d, 10, 0, -1, 40, 1, -1, Blocks.GLASS.getDefaultState());
 		SpindleEntity tunnel = posed(world, d.getX() + 25.5, ground, 0.5, -90f);
 		SHOTS.add(new Shot("06_tunnel_folded", v(d, 25.5, 2.2, -6), () -> tunnel.getPos().add(0, 0.8, 0), 80, () -> true));
 
 		// 5. hanging from a hall ceiling, side open
 		BlockPos e = new BlockPos(400, ground, 0);
 		Scenes.hall(world, e, 5, Blocks.STONE.getDefaultState());
-		Scenes.fill(world, e, -1, 0, -3, 41, 4, -3, Scenes.AIR);
+		Scenes.fill(world, e, -1, 0, -3, 41, 4, -3, Blocks.GLASS.getDefaultState());
 		SpindleEntity hanging = posed(world, e.getX() + 20.5, ground, 0.5, -90f);
 		hanging.setHanging(true);
 		hanging.setPosition(e.getX() + 20.5, ground + 5 - SpindleEntity.MIN_HEIGHT, 0.5);
@@ -160,7 +190,7 @@ public final class ShotHarness {
 		// 6. probe searching a house through its window, near wall left off
 		BlockPos f = new BlockPos(500, ground, 0);
 		Scenes.box(world, f, 6, 0, -4, 14, 4, 4, plank);
-		Scenes.fill(world, f, 7, 0, -4, 13, 3, -4, Scenes.AIR);
+		Scenes.fill(world, f, 7, 0, -4, 13, 3, -4, Blocks.GLASS.getDefaultState());
 		Scenes.set(world, f, 6, 1, 0, Blocks.GLASS_PANE.getDefaultState());
 		SpindleEntity prober = posed(world, f.getX() + 0.5, ground, 0.5, -90f);
 		SHOTS.add(new Shot("08_probe_search", v(f, 8, 3.5, -12), () -> v(f, 7, 2, 0), 120, () -> prober.tendril.isSearching(),
