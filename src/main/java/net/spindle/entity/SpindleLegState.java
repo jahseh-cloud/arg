@@ -35,6 +35,9 @@ public class SpindleLegState {
 	public float pitch, prevPitch;
 	public float roll, prevRoll;
 	private boolean initialized;
+	private float lastPlantFold;
+	private static final float[] HIP_Z = {-9f, 0f, 9f};
+	private static final float LEG_REACH_PX = 84f + 120f;
 
 	public boolean isReady() {
 		return initialized;
@@ -84,13 +87,32 @@ public class SpindleLegState {
 		double stepDist = MathHelper.lerp(fold, 1.5, 0.45);
 		Vec3d lead = new Vec3d(vel.x, 0, vel.z).multiply(stepDuration * 1.3);
 
+		boolean folded = fold > 0.5f;
+		float legScale = MathHelper.lerp(fold, 1.0f, 0.3f);
+		double reach = LEG_REACH_PX * legScale / 16.0 * 0.96;
+		Vec3d[] hip = new Vec3d[LEGS];
 		Vec3d[] home = new Vec3d[LEGS];
 		for (int i = 0; i < LEGS; i++) {
-			Vec3d off = modelToWorld(restModelX(i, radius), 24, restModelZ(i, radius), e.bodyYaw);
-			double hx = pos.x + off.x + lead.x;
-			double hz = pos.z + off.z + lead.z;
-			home[i] = new Vec3d(hx, groundAt(world, hx, hz, pos.y), hz);
+			float s = i < 3 ? 1f : -1f;
+			float hipYm = MathHelper.lerp(fold, -60f, 6f) + 3f - groundOffset * 16f;
+			hip[i] = pos.add(modelToWorld(s * 8f, hipYm, HIP_Z[i % 3], e.bodyYaw));
+			// Pick the resting spot; if the ground there is out of reach (cliff, deep hole), pull the foot inward.
+			Vec3d chosen = null;
+			for (float pull : new float[]{1.0f, 0.8f, 0.6f, 0.45f}) {
+				Vec3d off = modelToWorld(restModelX(i, radius * pull), 24, restModelZ(i, radius * pull), e.bodyYaw);
+				double hx = pos.x + off.x + lead.x;
+				double hz = pos.z + off.z + lead.z;
+				Vec3d cand = new Vec3d(hx, groundAt(world, hx, hz, pos.y, folded), hz);
+				if (chosen == null) chosen = cand;
+				if (cand.distanceTo(hip[i]) <= reach) {
+					chosen = cand;
+					break;
+				}
+			}
+			home[i] = chosen;
 		}
+		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.25f;
+		if (replantAll) lastPlantFold = fold;
 
 		boolean teleported = false;
 		if (initialized) {
@@ -137,13 +159,20 @@ public class SpindleLegState {
 		java.util.Arrays.sort(order, (a, b) -> Double.compare(err[b], err[a]));
 		boolean idle = vel.horizontalLengthSquared() < 1e-4;
 		for (int i : order) {
-			if (stepping[i] || !canStep(i)) continue;
+			if (stepping[i]) continue;
+			// A foot that's out of reach (or we just folded/unfolded) steps right away, no waiting its turn.
+			boolean urgent = replantAll || (foot[i].distanceTo(hip[i]) > reach && foot[i].distanceTo(home[i]) > 0.5);
+			if (urgent) {
+				startStep(i, home[i]);
+				continue;
+			}
+			if (!canStep(i)) continue;
 			if (err[i] > stepDist) {
 				startStep(i, home[i]);
 			} else if (idle && e.getRandom().nextFloat() < 0.003f) {
 				// Idle twitch: lift a leg and set it back down a little off.
 				Vec3d j = home[i].add((e.getRandom().nextFloat() - 0.5f) * 0.6, 0, (e.getRandom().nextFloat() - 0.5f) * 0.6);
-				startStep(i, new Vec3d(j.x, groundAt(world, j.x, j.z, pos.y), j.z));
+				startStep(i, new Vec3d(j.x, groundAt(world, j.x, j.z, pos.y, folded), j.z));
 			}
 		}
 
@@ -192,21 +221,37 @@ public class SpindleLegState {
 				volume, 0.4f + e.getRandom().nextFloat() * 0.15f, false);
 	}
 
-	/** Height of the walkable surface nearest to refY at (x, z): a solid top with open space above. */
-	public static double groundAt(World world, double x, double z, double refY) {
+	/**
+	 * Height of the walkable surface under (x, z): a solid top with open space above it.
+	 * Standing (huge): the highest such surface from a few blocks above its feet down to 10 below, so feet
+	 * go on roofs, ledges and tree tops rather than through them. Folded (in tunnels): the surface nearest
+	 * its own height, so feet stay on the cave floor instead of climbing through the ceiling.
+	 */
+	public static double groundAt(World world, double x, double z, double refY, boolean folded) {
 		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refY);
 		BlockPos.Mutable m = new BlockPos.Mutable();
-		for (int d = 0; d <= 6; d++) {
+		if (!folded) {
+			for (int y = by + 4; y >= by - 10; y--) {
+				double top = walkableTop(world, m, bx, y, bz);
+				if (top != Double.NEGATIVE_INFINITY) return top;
+			}
+			return by - 10;
+		}
+		for (int d = 0; d <= 3; d++) {
 			for (int sign : (d == 0 ? new int[]{1} : new int[]{-1, 1})) {
-				int y = by + d * sign;
-				m.set(bx, y, bz);
-				double top = surfaceTop(world, m);
-				if (top == Double.NEGATIVE_INFINITY) continue;
-				m.set(bx, y + 1, bz);
-				if (!isSolid(world, m)) return top;
+				double top = walkableTop(world, m, bx, by + d * sign, bz);
+				if (top != Double.NEGATIVE_INFINITY) return top;
 			}
 		}
 		return refY;
+	}
+
+	private static double walkableTop(World world, BlockPos.Mutable m, int x, int y, int z) {
+		m.set(x, y, z);
+		double top = surfaceTop(world, m);
+		if (top == Double.NEGATIVE_INFINITY) return top;
+		m.set(x, y + 1, z);
+		return isSolid(world, m) ? Double.NEGATIVE_INFINITY : top;
 	}
 
 	private static double surfaceTop(World world, BlockPos pos) {

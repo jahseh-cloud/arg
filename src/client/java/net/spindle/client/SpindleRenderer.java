@@ -14,6 +14,7 @@ import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
 import net.spindle.Spindle;
 import net.spindle.entity.SpindleEntity;
+import net.spindle.entity.SpindleLegState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,24 +47,26 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 	private void renderTendrils(SpindleEntity entity, float tickDelta, MatrixStack matrices,
 								VertexConsumerProvider vertexConsumers, int light) {
 		ModelPart seg = this.getModel().tendril;
-		VertexConsumer vc = vertexConsumers.getBuffer(RenderLayer.getEntityCutoutNoCull(TEXTURE));
+		RenderLayer cutout = RenderLayer.getEntityCutoutNoCull(TEXTURE);
 		Vec3d base = entity.getLerpedPos(tickDelta);
 		float fold = MathHelper.lerp(tickDelta, entity.prevFoldProgress, entity.foldProgress);
-		double coreY = MathHelper.lerp(fold, SpindleEntity.CORE_HEIGHT_STANDING, SpindleEntity.CORE_HEIGHT_FOLDED);
-		Vec3d core = base.add(0, coreY, 0);
+		float bodyYawDeg = MathHelper.lerpAngleDegrees(tickDelta, entity.prevBodyYaw, entity.bodyYaw);
+		// Where the core actually is this frame (the body bobs, rides the terrain and folds).
+		Vec3d core = base.add(SpindleLegState.modelToWorld(0, this.getModel().coreBottomY, 1, bodyYawDeg));
 		float time = entity.age + tickDelta;
 		int overlay = OverlayTexture.DEFAULT_UV;
 
 		seg.visible = true;
 
-		// Two short tendrils always hang from the core and sway.
-		float bodyYaw = MathHelper.lerp(tickDelta, entity.prevBodyYaw, entity.bodyYaw) * MathHelper.RADIANS_PER_DEGREE;
+		// Two short tendrils always hang from the underside of the core and sway.
+		float yawRad = bodyYawDeg * MathHelper.RADIANS_PER_DEGREE;
 		for (int i = 0; i < 2; i++) {
-			double side = i == 0 ? 0.3 : -0.3;
-			Vec3d start = core.add(Math.cos(bodyYaw) * side, -0.1, Math.sin(bodyYaw) * side);
+			double side = i == 0 ? 0.22 : -0.22;
+			Vec3d start = core.add(Math.cos(yawRad) * side, 0.05, Math.sin(yawRad) * side);
 			double len = (1.2 + 0.25 * Math.sin(time * 0.07 + i * 2)) * (1.0 - fold * 0.6);
 			Vec3d end = start.add(Math.sin(time * 0.05 + i) * 0.35, -len, Math.cos(time * 0.043 + i * 3) * 0.35);
-			drawChain(List.of(start, end), base, matrices, vc, seg, light, overlay, time + i * 17, 0.12, 0.9f, 0.35f);
+			drawChain(List.of(start, end), base, matrices, vertexConsumers.getBuffer(cutout), seg, light, overlay,
+					time + i * 17, 0.12, 0.9f, 0.35f);
 		}
 
 		// The reaching / searching tendril.
@@ -74,7 +77,8 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 			points.add(core);
 			points.addAll(entity.clientAnchors);
 			points.add(tip);
-			drawChain(points, base, matrices, vc, seg, light, overlay, time, searching ? 0.1 : 0.35, 1.5f, 0.45f);
+			drawChain(points, base, matrices, vertexConsumers.getBuffer(cutout), seg, light, overlay, time,
+					searching ? 0.1 : 0.35, 1.5f, 0.45f);
 
 			if (searching) {
 				// The eye: a small glowing lens on the tip, pointing where it's looking.
@@ -83,10 +87,11 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 				lookDir = lookDir.normalize();
 				Vec3d eyeStart = tip.subtract(lookDir.multiply(0.1));
 				Vec3d eyeEnd = tip.add(lookDir.multiply(0.22));
-				VertexConsumer glow = vertexConsumers.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW));
 				float pulse = 0.75f + 0.25f * MathHelper.sin(time * 0.6f);
-				drawSegment(eyeStart, eyeEnd, base, matrices, glow, seg, 0xF000F0, overlay, 2.4f * pulse, colorGray(pulse));
-				drawSegment(eyeStart, eyeEnd, base, matrices, vc, seg, light, overlay, 1.9f, -1);
+				// Each layer's buffer is fetched right before it's used: fetching another layer ends the previous one.
+				drawSegment(eyeStart, eyeEnd, base, matrices, vertexConsumers.getBuffer(cutout), seg, light, overlay, 1.9f, -1);
+				drawSegment(eyeStart, eyeEnd, base, matrices, vertexConsumers.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW)),
+						seg, 0xF000F0, overlay, 2.4f * pulse, colorGray(pulse));
 			}
 		}
 

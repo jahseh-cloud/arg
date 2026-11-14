@@ -37,6 +37,8 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 	public final ModelPart tendril;
 
 	private float tickDelta;
+	/** Model-space Y of the underside of the core, from the last setAngles call (used by the renderer). */
+	public float coreBottomY = -48f;
 
 	public SpindleModel(ModelPart root) {
 		this.root = root;
@@ -121,6 +123,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 		float stepBob = Math.abs(MathHelper.sin(limbAngle * 0.6f)) * 2f * speed;
 		float bodyY = MathHelper.lerp(fold, -60f, 6f) - groundOff * 16f + breathe + stepBob + strike * 6f;
 		body.pivotY = bodyY;
+		coreBottomY = bodyY + 12f; // core part: pivot +5, 7 tall
 		body.pitch = strike * 0.35f + MathHelper.sin(animationProgress * 0.04f) * 0.03f - tiltPitch;
 		body.roll = -tiltRoll;
 		body.yaw = 0f;
