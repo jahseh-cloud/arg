@@ -68,6 +68,8 @@ public class SpindleLegState {
 	private boolean initialized;
 	private float lastPlantFold;
 	private boolean lastHanging;
+	private final int[] homeChoice = new int[LEGS];
+	private int tickCount;
 
 	public boolean isReady() {
 		return initialized;
@@ -174,6 +176,7 @@ public class SpindleLegState {
 
 	public void tick(SpindleEntity e) {
 		World world = e.getWorld();
+		tickCount++;
 		Vec3d pos = e.getPos();
 		Vec3d vel = pos.subtract(e.prevX, e.prevY, e.prevZ);
 		boolean hanging = e.isHanging();
@@ -210,7 +213,12 @@ public class SpindleLegState {
 			Vec3d side = modelDirToWorld(sideHintModel(i), e.bodyYaw, false);
 			home[i] = null;
 			// First choice is the resting spot; then pulled in; then swung fore/aft (tunnels); then tucked under.
-			for (int c = 0; c < 8 && home[i] == null; c++) {
+			// Stick with last tick's kind of spot (stops feet flicking between choices); every
+			// half second, try the preferred spots again.
+			int first = (tickCount % 10 == 0) ? 0 : homeChoice[i];
+			for (int n = 0; n < 9 && home[i] == null; n++) {
+				int c = n == 0 ? first : n - 1;
+				if (n > 0 && c == first) continue;
 				boolean swing = c == 2 || c == 3 || c == 5;
 				float angle = swing ? TUNNEL_ANGLES[i % 3] : LEG_ANGLES[i % 3];
 				float pull = switch (c) {
@@ -234,11 +242,12 @@ public class SpindleLegState {
 					if (cand.distanceTo(hip[i]) > reach) continue;
 					if (!legCanReach(world, hip[i], cand, l1, l2, up, side)) continue;
 					home[i] = cand;
+					homeChoice[i] = c;
 				}
 			}
 			if (home[i] == null) home[i] = new Vec3d(pos.x + lead.x, hanging ? ceilRef : pos.y, pos.z + lead.z);
 		}
-		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.2f || hanging != lastHanging;
+		boolean replantAll = hanging != lastHanging;
 		if (replantAll) {
 			lastPlantFold = fold;
 			lastHanging = hanging;
@@ -296,8 +305,8 @@ public class SpindleLegState {
 		for (int i : order) {
 			if (stepping[i] || e.isDead()) continue;
 			// A foot that's out of reach (or the body just changed size) steps right away, no waiting its turn.
-			boolean urgent = (replantAll && err[i] > 0.3) || (foot[i].distanceTo(hip[i]) > reach && err[i] > 0.5);
-			if (urgent) {
+			boolean urgent = replantAll || (foot[i].distanceTo(hip[i]) > reach * 1.05 && err[i] > 0.5);
+			if (urgent && steppingCount() < 3) {
 				startStep(i, home[i]);
 				continue;
 			}
@@ -319,8 +328,18 @@ public class SpindleLegState {
 			float sign = tiltTarget[i] < 0 ? -1f : 1f;
 			double span = hip[i].distanceTo(foot[i]);
 			float chosenTilt = 0f, chosenScale = -1f;
+			float keepScale = scale[i] > 0f ? Math.min(scale[i], baseScale) : baseScale;
+			if (UPPER_LEN * keepScale / 16.0 + LOWER_LEN * keepScale / 16.0 >= span * 1.02) {
+				Vec3d knee = solveKnee(hip[i], foot[i], UPPER_LEN * keepScale / 16.0, LOWER_LEN * keepScale / 16.0, up, side, tiltTarget[i]);
+				boolean clear = !segmentBlocked(world, hip[i], knee, 0.7, 0) && !segmentBlocked(world, knee, foot[i], 0, 0.45);
+				// Still fine: keep it, but let it creep back toward full length and upright once there's room.
+				if (clear && (keepScale >= baseScale - 0.01f || tickCount % 8 != 0) && (Math.abs(tiltTarget[i]) < 0.01f || tickCount % 8 != 0)) {
+					chosenTilt = tiltTarget[i];
+					chosenScale = keepScale;
+				}
+			}
 			search:
-			for (float shrink : SHRINK_STEPS) {
+			for (float shrink : (chosenScale > 0 ? new float[0] : SHRINK_STEPS)) {
 				float sc = baseScale * shrink;
 				double a1 = UPPER_LEN * sc / 16.0, a2 = LOWER_LEN * sc / 16.0;
 				if (a1 + a2 < span * 1.02) {
@@ -343,7 +362,7 @@ public class SpindleLegState {
 			}
 			if (chosenScale < 0) chosenScale = baseScale * SHRINK_STEPS[SHRINK_STEPS.length - 1];
 			tiltTarget[i] = chosenTilt;
-			tilt[i] += (chosenTilt - tilt[i]) * 0.35f;
+			tilt[i] += (chosenTilt - tilt[i]) * 0.2f;
 			// Shrinking happens fast (no clipping), growing back slowly.
 			scale[i] += (chosenScale - scale[i]) * (chosenScale < scale[i] ? 0.6f : 0.15f);
 		}
@@ -379,10 +398,14 @@ public class SpindleLegState {
 		stepping[i] = true;
 	}
 
-	private boolean canStep(int i) {
+	private int steppingCount() {
 		int count = 0;
 		for (boolean b : stepping) if (b) count++;
-		if (count >= 3) return false;
+		return count;
+	}
+
+	private boolean canStep(int i) {
+		if (steppingCount() >= 3) return false;
 		int side = i / 3, k = i % 3;
 		if (k > 0 && stepping[side * 3 + k - 1]) return false;
 		if (k < 2 && stepping[side * 3 + k + 1]) return false;

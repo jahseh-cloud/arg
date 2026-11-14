@@ -21,7 +21,8 @@ import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributeInstance;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.damage.DamageTypes;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.registry.tag.DamageTypeTags;
 import net.minecraft.entity.data.DataTracker;
 import net.minecraft.entity.data.TrackedData;
 import net.minecraft.entity.data.TrackedDataHandlerRegistry;
@@ -369,10 +370,19 @@ public class SpindleEntity extends HostileEntity {
 	}
 
 	@Override
+	/**
+	 * It doesn't belong to this world, and the world can't hurt it: no suffocation, fire, fall, cactus,
+	 * freezing, dripstone, stray arrows... Only players, mobs actually fighting it, explosions, the void
+	 * and /kill can.
+	 */
 	public boolean isInvulnerableTo(DamageSource source) {
-		return source.isOf(DamageTypes.IN_WALL) || source.isOf(DamageTypes.CRAMMING) || source.isOf(DamageTypes.DROWN)
-				|| source.isOf(DamageTypes.CACTUS) || source.isOf(DamageTypes.SWEET_BERRY_BUSH)
-				|| super.isInvulnerableTo(source);
+		if (source.isIn(DamageTypeTags.BYPASSES_INVULNERABILITY)) return super.isInvulnerableTo(source);
+		Entity attacker = source.getAttacker();
+		if (attacker == null) return !source.isIn(DamageTypeTags.IS_EXPLOSION) || super.isInvulnerableTo(source);
+		if (attacker instanceof PlayerEntity) return super.isInvulnerableTo(source);
+		if (attacker instanceof MobEntity m && m.getTarget() == this) return super.isInvulnerableTo(source);
+		if (source.isIn(DamageTypeTags.IS_EXPLOSION)) return super.isInvulnerableTo(source);
+		return true;
 	}
 
 	@Override
@@ -422,6 +432,7 @@ public class SpindleEntity extends HostileEntity {
 		tendril.tick(world);
 		tickStolenItems(world);
 
+		if (this.age % 4 == 0) swatMobsInTheWay(world);
 		if (mode == Mode.STALK && !watched && getTarget() != null && distanceTo(getTarget()) < 26
 				&& getRandom().nextInt(900) == 0) {
 			playSound(SpindleSounds.PROBE_MUMBLE, 0.35f, 0.6f + getRandom().nextFloat() * 0.15f);
@@ -893,6 +904,44 @@ public class SpindleEntity extends HostileEntity {
 			for (StolenItem s : stolen) dropStack(s.stack);
 			stolen.clear();
 			tendril.forceRelease();
+		}
+	}
+
+	/**
+	 * Anything that isn't a player and is in its way (close, or ahead of where it's walking) gets hit.
+	 * It doesn't go after mobs, it just doesn't go around them.
+	 */
+	private void swatMobsInTheWay(ServerWorld world) {
+		if (frozen || isHanging() || !canMeleeNow() || !tendril.isIdle()) return;
+		Vec3d vel = getVelocity();
+		Vec3d dir = new Vec3d(vel.x, 0, vel.z);
+		boolean moving = dir.lengthSquared() > 0.0004;
+		if (moving) dir = dir.normalize();
+		double reach = MathHelper.lerp(getFold(), 3.3, 2.4);
+		LivingEntity best = null;
+		double bestD = Double.MAX_VALUE;
+		for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class, getBoundingBox().expand(reach, 1.0, reach),
+				e -> e != this && e.isAlive() && !(e instanceof PlayerEntity) && !(e instanceof SpindleEntity)
+						&& !(e instanceof net.minecraft.entity.decoration.ArmorStandEntity) && !e.isInvulnerable())) {
+			Vec3d to = new Vec3d(e.getX() - getX(), 0, e.getZ() - getZ());
+			double d = to.length();
+			boolean inPath = d < 1.6 + e.getWidth() / 2 || (moving && d > 0.01 && to.multiply(1 / d).dotProduct(dir) > 0.35);
+			if (!inPath || !isInMeleeReach(e) || !canSee(e)) continue;
+			if (d < bestD) {
+				bestD = d;
+				best = e;
+			}
+		}
+		if (best != null) {
+			getLookControl().lookAt(best, 30f, 30f);
+			if (tryAttack(best)) {
+				Vec3d away = new Vec3d(best.getX() - getX(), 0, best.getZ() - getZ());
+				if (away.lengthSquared() > 1e-4) {
+					away = away.normalize();
+					best.addVelocity(away.x * 0.9, 0.35, away.z * 0.9);
+					best.velocityModified = true;
+				}
+			}
 		}
 	}
 

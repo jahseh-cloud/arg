@@ -38,7 +38,7 @@ public class Spindle implements ModInitializer {
 	public static final Item SPINDLE_SPAWN_EGG = Registry.register(
 			Registries.ITEM,
 			id("spindle_spawn_egg"),
-			new SpawnEggItem(SPINDLE, 0x1c1a1e, 0x7a1f14, new Item.Settings()));
+			new SpawnEggItem(SPINDLE, 0x050507, 0xff00ff, new Item.Settings()));
 
 	public static Identifier id(String path) {
 		return Identifier.of(MOD_ID, path);

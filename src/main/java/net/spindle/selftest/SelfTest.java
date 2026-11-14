@@ -82,6 +82,8 @@ public final class SelfTest {
 		SCENARIOS.add(new TravelFar());
 		SCENARIOS.add(new MansionCorridor());
 		SCENARIOS.add(new RoughSteps());
+		SCENARIOS.add(new MobsInPath());
+		SCENARIOS.add(new NoWorldDamage());
 		int i = 0;
 		for (Scenario s : SCENARIOS) {
 			int ox = 1000 + 400 * i++, oz = 1000;
@@ -567,6 +569,73 @@ public final class SelfTest {
 		String check() {
 			if (t == 10) forceHunt();
 			return hurt() ? "PASS climbed up and hit the player at t=" + t : null;
+		}
+	}
+
+	/** A herd of cows between it and the player: it should hit what's in its way on the way through. */
+	static class MobsInPath extends Scenario {
+		final java.util.List<net.minecraft.entity.LivingEntity> cows = new ArrayList<>();
+
+		MobsInPath() {
+			super("mobs_in_path", 600);
+		}
+
+		@Override
+		void setup() {
+			spawn(26.5, 0.5, -90f);
+			for (int z = -1; z <= 1; z++) {
+				for (int x = 10; x <= 14; x += 2) {
+					net.minecraft.entity.passive.CowEntity cow = net.minecraft.entity.EntityType.COW.create(world);
+					if (cow == null) continue;
+					cow.refreshPositionAndAngles(o.getX() + x + 0.5, o.getY(), o.getZ() + z * 1.5 + 0.5, 0f, 0f);
+					cow.setAiDisabled(true);
+					world.spawnEntity(cow);
+					cows.add(cow);
+				}
+			}
+		}
+
+		@Override
+		String check() {
+			if (t == 10) forceHunt();
+			if (!hurt()) return null;
+			long hit = cows.stream().filter(c -> !c.isAlive() || c.getHealth() < c.getMaxHealth()).count();
+			return (hit > 0 ? "PASS" : "FAIL walked through the herd without hitting anything:") + " hit " + hit + " cows on the way, reached the player at t=" + t;
+		}
+
+		@Override
+		void cleanup() {
+			super.cleanup();
+			cows.forEach(net.minecraft.entity.Entity::discard);
+		}
+	}
+
+	/** Set on fire, standing on magma between cactus and berry bushes: none of it should hurt. */
+	static class NoWorldDamage extends Scenario {
+		NoWorldDamage() {
+			super("no_world_damage", 200);
+		}
+
+		@Override
+		void setup() {
+			Scenes.fill(world, o, -2, -1, -2, 2, -1, 2, Blocks.MAGMA_BLOCK.getDefaultState());
+			Scenes.set(world, o, 1, 0, 0, Blocks.CACTUS.getDefaultState());
+			Scenes.set(world, o, -1, 0, 0, Blocks.SWEET_BERRY_BUSH.getDefaultState());
+			Scenes.set(world, o, 0, 0, 1, Blocks.FIRE.getDefaultState());
+			spindle = Scenes.spawnSpindle(world, o.getX() + 0.5, o.getY(), o.getZ() + 0.5, -90f);
+			spindle.setOnFireFor(10f);
+			victim = TestPlayer.spawn(world, "t_" + name, at(60.5, 0, 0.5), -90f);
+		}
+
+		@Override
+		String check() {
+			return null;
+		}
+
+		@Override
+		String atTimeout() {
+			float hp = spindle.getHealth();
+			return (hp >= spindle.getMaxHealth() ? "PASS" : "FAIL") + " health after 10s of fire, magma, cactus and berries: " + hp;
 		}
 	}
 

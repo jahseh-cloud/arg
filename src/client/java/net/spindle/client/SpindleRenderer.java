@@ -157,7 +157,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		drawPart(lensPos, dir, base, matrices, vcp.getBuffer(cutout), model.probeLens, light, overlay, HEAD, 0, 0);
 		if (searching || alert) {
 			float pulse = alert ? 0.85f + 0.15f * MathHelper.sin(time * 2.1f) : 0.6f + 0.25f * MathHelper.sin(time * 0.25f);
-			VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW));
+			VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.currentGlitch(entity, time)));
 			drawPart(lensPos.add(dir.multiply(0.01)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay, 1.05f * HEAD, 0, colorGray(pulse));
 			drawPart(lensPos.add(dir.multiply(0.02)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay,
 					(alert ? 3.2f : 2.4f) * HEAD, 0, colorGray(pulse * 0.22f));
