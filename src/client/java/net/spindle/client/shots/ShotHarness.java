@@ -23,8 +23,8 @@ import java.util.function.Supplier;
  * screenshots of them, so the model and animation can be checked without someone playing.
  */
 public final class ShotHarness {
-	private record Shot(String name, Vec3d camera, Supplier<Vec3d> lookAt, int wait, Supplier<Boolean> ready, Runnable atStart) {
-		Shot(String name, Vec3d camera, Supplier<Vec3d> lookAt, int wait, Supplier<Boolean> ready) {
+	private record Shot(String name, Vec3d camera, Supplier<Vec3d> lookAt, int delay, Supplier<Boolean> ready, Runnable atStart) {
+		Shot(String name, Vec3d camera, Supplier<Vec3d> lookAt, int delay, Supplier<Boolean> ready) {
 			this(name, camera, lookAt, wait, ready, null);
 		}
 	}
@@ -79,8 +79,8 @@ public final class ShotHarness {
 		shotTicks++;
 		if (shotTicks == 20 && s.atStart != null) server.execute(s.atStart);
 		if (shotTicks % 10 == 0) teleport(server, s.camera, s.lookAt.get());
-		boolean timeUp = shotTicks >= s.wait + 200;
-		if (shotTicks >= s.wait && (s.ready.get() || timeUp)) {
+		boolean timeUp = shotTicks >= s.delay + 200;
+		if (shotTicks >= s.delay && (s.ready.get() || timeUp)) {
 			ScreenshotRecorder.saveScreenshot(client.runDirectory, s.name + ".png", client.getFramebuffer(), msg -> {});
 			log("SAVED " + s.name + (timeUp ? " (timed out waiting)" : ""));
 			shotTicks = -1;
