@@ -14,7 +14,7 @@ import net.spindle.entity.SpindleEntity;
 
 /** The core's glow. Bright when it wanders, dim when it stalks, almost gone when it hunts. */
 public class SpindleCoreFeature extends FeatureRenderer<SpindleEntity, SpindleModel> {
-	private static final Identifier GLOW = Spindle.id("textures/entity/spindle_glow.png");
+	static final Identifier GLOW = Spindle.id("textures/entity/spindle_glow.png");
 
 	public SpindleCoreFeature(FeatureRendererContext<SpindleEntity, SpindleModel> context) {
 		super(context);

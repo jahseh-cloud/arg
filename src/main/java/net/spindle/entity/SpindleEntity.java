@@ -90,9 +90,9 @@ public class SpindleEntity extends HostileEntity {
 	private static final TrackedData<Integer> MODE = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.INTEGER);
 	private static final TrackedData<Integer> TENDRIL_FLAGS = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.INTEGER);
 	private static final TrackedData<Vector3f> TENDRIL_TIP = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.VECTOR3F);
-	private static final TrackedData<Vector3f> TENDRIL_MID = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.VECTOR3F);
+	private static final TrackedData<Vector3f> TENDRIL_LOOK = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.VECTOR3F);
 
-	public static final int TENDRIL_ACTIVE = 1, TENDRIL_HAS_MID = 2, TENDRIL_PAST_MID = 4;
+	public static final int TENDRIL_ACTIVE = 1, TENDRIL_SEARCHING = 2;
 
 	public enum Mode { WANDER, STALK, HUNT, RETREAT }
 
@@ -120,6 +120,8 @@ public class SpindleEntity extends HostileEntity {
 	public float glow = 0.8f, prevGlow = 0.8f;
 	public int attackAnimTicks;
 	public Vec3d clientTip, prevClientTip;
+	/** Bends in the tendril's body, received by packet. */
+	public List<Vec3d> clientAnchors = List.of();
 	public final SpindleLegState legs = new SpindleLegState();
 
 	public SpindleEntity(EntityType<? extends SpindleEntity> type, World world) {
@@ -150,7 +152,7 @@ public class SpindleEntity extends HostileEntity {
 		builder.add(MODE, 0);
 		builder.add(TENDRIL_FLAGS, 0);
 		builder.add(TENDRIL_TIP, new Vector3f());
-		builder.add(TENDRIL_MID, new Vector3f());
+		builder.add(TENDRIL_LOOK, new Vector3f(0, 0, 1));
 	}
 
 	@Override
@@ -296,6 +298,10 @@ public class SpindleEntity extends HostileEntity {
 		tendril.tick(world);
 		tickStolenItems(world);
 
+		if (mode == Mode.STALK && !watched && getTarget() != null && distanceTo(getTarget()) < 26
+				&& getRandom().nextInt(900) == 0) {
+			playSound(net.spindle.SpindleSounds.PROBE_MUMBLE, 0.35f, 0.6f + getRandom().nextFloat() * 0.15f);
+		}
 		if (mode == Mode.RETREAT && !watched && this.age % 20 == 0) heal(1.0f);
 		else if (this.age % 100 == 0) heal(1.0f);
 
@@ -320,6 +326,7 @@ public class SpindleEntity extends HostileEntity {
 
 		Vec3d core = getPos().add(0, MathHelper.lerp(foldProgress, CORE_HEIGHT_STANDING, CORE_HEIGHT_FOLDED), 0);
 		Vec3d target = isTendrilActive() ? getTendrilTip() : core;
+		if (!isTendrilActive()) clientAnchors = List.of();
 		prevClientTip = clientTip == null ? target : clientTip;
 		clientTip = clientTip == null ? target : clientTip.lerp(target, 0.6);
 	}
@@ -515,7 +522,7 @@ public class SpindleEntity extends HostileEntity {
 				}
 			}
 			case HUNT -> {
-				huntTicks++;
+				if (!tendril.isSearching()) huntTicks++;
 				boolean giveUp = dist > 64
 						|| (exposedDay && huntTicks > 200)
 						|| (group >= 3 && huntTicks > 100)
@@ -676,16 +683,28 @@ public class SpindleEntity extends HostileEntity {
 
 	// ================================================================ tendril sync
 
-	public void syncTendril(boolean active, Vec3d tip, @Nullable Vec3d mid, boolean pastMid) {
+	public void syncTendril(boolean active, boolean searching, Vec3d tip, Vec3d look) {
 		int flags = 0;
 		if (active) flags |= TENDRIL_ACTIVE;
-		if (mid != null) flags |= TENDRIL_HAS_MID;
-		if (pastMid) flags |= TENDRIL_PAST_MID;
+		if (searching) flags |= TENDRIL_SEARCHING;
 		this.dataTracker.set(TENDRIL_FLAGS, flags);
 		if (active) {
 			this.dataTracker.set(TENDRIL_TIP, tip.toVector3f());
-			if (mid != null) this.dataTracker.set(TENDRIL_MID, mid.toVector3f());
+			this.dataTracker.set(TENDRIL_LOOK, look.toVector3f());
 		}
+	}
+
+	public boolean isTendrilSearching() {
+		return (getTendrilFlags() & TENDRIL_SEARCHING) != 0;
+	}
+
+	public Vec3d getTendrilLook() {
+		return new Vec3d(this.dataTracker.get(TENDRIL_LOOK));
+	}
+
+	/** The probe came back empty. It's frustrated: it gets closer to just hunting. */
+	public void onSearchFailed() {
+		tension = Math.min(HUNT_THRESHOLD, tension + 600f);
 	}
 
 	public int getTendrilFlags() {
@@ -700,9 +719,6 @@ public class SpindleEntity extends HostileEntity {
 		return new Vec3d(this.dataTracker.get(TENDRIL_TIP));
 	}
 
-	public Vec3d getTendrilMid() {
-		return new Vec3d(this.dataTracker.get(TENDRIL_MID));
-	}
 
 	// ================================================================ accessors for goals
 

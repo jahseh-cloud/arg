@@ -1,4 +1,7 @@
 {
 	"entity.spindle.spindle": "Spindle",
-	"item.spindle.spindle_spawn_egg": "Spindle Spawn Egg"
+	"item.spindle.spindle_spawn_egg": "Spindle Spawn Egg",
+	"subtitles.spindle.probe_mumble": "Something mumbles",
+	"subtitles.spindle.probe_servo": "Something whirs",
+	"subtitles.spindle.probe_found": "Something shrieks"
 }

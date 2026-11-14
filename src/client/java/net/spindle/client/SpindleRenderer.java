@@ -66,17 +66,28 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 			drawChain(List.of(start, end), base, matrices, vc, seg, light, overlay, time + i * 17, 0.12, 0.9f, 0.35f);
 		}
 
-		// The reaching tendril.
+		// The reaching / searching tendril.
 		if (entity.isTendrilActive() && entity.clientTip != null && entity.prevClientTip != null) {
 			Vec3d tip = entity.prevClientTip.lerp(entity.clientTip, tickDelta);
-			int flags = entity.getTendrilFlags();
+			boolean searching = entity.isTendrilSearching();
 			List<Vec3d> points = new ArrayList<>();
 			points.add(core);
-			if ((flags & SpindleEntity.TENDRIL_HAS_MID) != 0 && (flags & SpindleEntity.TENDRIL_PAST_MID) != 0) {
-				points.add(entity.getTendrilMid());
-			}
+			points.addAll(entity.clientAnchors);
 			points.add(tip);
-			drawChain(points, base, matrices, vc, seg, light, overlay, time, 0.35, 1.5f, 0.45f);
+			drawChain(points, base, matrices, vc, seg, light, overlay, time, searching ? 0.1 : 0.35, 1.5f, 0.45f);
+
+			if (searching) {
+				// The eye: a small glowing lens on the tip, pointing where it's looking.
+				Vec3d lookDir = entity.getTendrilLook();
+				if (lookDir.lengthSquared() < 1e-4) lookDir = new Vec3d(0, 0, 1);
+				lookDir = lookDir.normalize();
+				Vec3d eyeStart = tip.subtract(lookDir.multiply(0.1));
+				Vec3d eyeEnd = tip.add(lookDir.multiply(0.22));
+				VertexConsumer glow = vertexConsumers.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW));
+				float pulse = 0.75f + 0.25f * MathHelper.sin(time * 0.6f);
+				drawSegment(eyeStart, eyeEnd, base, matrices, glow, seg, 0xF000F0, overlay, 2.4f * pulse, colorGray(pulse));
+				drawSegment(eyeStart, eyeEnd, base, matrices, vc, seg, light, overlay, 1.9f, -1);
+			}
 		}
 
 		seg.visible = false;
@@ -129,6 +140,25 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 			seg.render(matrices, vc, light, overlay);
 			matrices.pop();
 		}
+	}
+
+	private static void drawSegment(Vec3d a, Vec3d b, Vec3d base, MatrixStack matrices, VertexConsumer vc, ModelPart seg,
+									int light, int overlay, float thickness, int color) {
+		Vec3d d = b.subtract(a);
+		double len = d.length();
+		if (len < 1e-4) return;
+		matrices.push();
+		matrices.translate(a.x - base.x, a.y - base.y, a.z - base.z);
+		matrices.multiply(RotationAxis.POSITIVE_Y.rotation((float) Math.atan2(d.x, d.z)));
+		matrices.multiply(RotationAxis.POSITIVE_X.rotation((float) -Math.atan2(d.y, Math.sqrt(d.x * d.x + d.z * d.z))));
+		matrices.scale(thickness, thickness, (float) len);
+		seg.render(matrices, vc, light, overlay, color);
+		matrices.pop();
+	}
+
+	private static int colorGray(float v) {
+		int c = MathHelper.clamp((int) (v * 255f), 0, 255);
+		return 0xFF000000 | (c << 16) | (c << 8) | c;
 	}
 
 	private static Vec3d pointAlong(List<Vec3d> controls, double dist) {

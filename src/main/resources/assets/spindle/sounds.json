@@ -1,0 +1,29 @@
+{
+	"probe_mumble": {
+		"subtitle": "subtitles.spindle.probe_mumble",
+		"sounds": [
+			{"name": "spindle:probe/mumble1", "attenuation_distance": 20},
+			{"name": "spindle:probe/mumble2", "attenuation_distance": 20},
+			{"name": "spindle:probe/mumble3", "attenuation_distance": 20},
+			{"name": "spindle:probe/mumble4", "attenuation_distance": 20},
+			{"name": "spindle:probe/mumble5", "attenuation_distance": 20},
+			{"name": "spindle:probe/mumble6", "attenuation_distance": 20}
+		]
+	},
+	"probe_servo": {
+		"subtitle": "subtitles.spindle.probe_servo",
+		"sounds": [
+			{"name": "spindle:probe/servo1", "attenuation_distance": 12},
+			{"name": "spindle:probe/servo2", "attenuation_distance": 12},
+			{"name": "spindle:probe/servo3", "attenuation_distance": 12},
+			{"name": "spindle:probe/servo4", "attenuation_distance": 12}
+		]
+	},
+	"probe_found": {
+		"subtitle": "subtitles.spindle.probe_found",
+		"sounds": [
+			{"name": "spindle:probe/found1", "attenuation_distance": 32},
+			{"name": "spindle:probe/found2", "attenuation_distance": 32}
+		]
+	}
+}
