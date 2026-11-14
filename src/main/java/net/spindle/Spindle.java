@@ -43,6 +43,7 @@ public class Spindle implements ModInitializer {
 	public void onInitialize() {
 		SpindleSounds.init();
 		SpindleNetworking.init();
+		SpindleDebug.init();
 		FabricDefaultAttributeRegistry.register(SPINDLE, SpindleEntity.createSpindleAttributes());
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.SPAWN_EGGS).register(entries -> entries.add(SPINDLE_SPAWN_EGG));
 		// After a restart, reload wherever each Spindle was so it keeps going without anyone nearby.

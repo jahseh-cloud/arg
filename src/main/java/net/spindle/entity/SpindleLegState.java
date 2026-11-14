@@ -32,6 +32,8 @@ public class SpindleLegState {
 	private float stepLift = 1f;
 
 	public float groundOffset, prevGroundOffset;
+	/** Visual fold actually drawn: the hitbox fold, or more if the ceiling is low. */
+	public float visualFold, prevVisualFold;
 	public float pitch, prevPitch;
 	public float roll, prevRoll;
 	private boolean initialized;
@@ -88,7 +90,13 @@ public class SpindleLegState {
 		World world = e.getWorld();
 		Vec3d pos = e.getPos();
 		Vec3d vel = pos.subtract(e.prevX, e.prevY, e.prevZ);
-		float fold = e.foldProgress;
+		// Shrink to fit the room: a low ceiling folds the legs down even if the hitbox is standing.
+		prevVisualFold = visualFold;
+		float roomFold = 1f - headroomPosture(world, pos);
+		float targetFold = e.isHanging() ? 1f : Math.max(e.foldProgress, roomFold);
+		visualFold += (targetFold - visualFold) * 0.2f;
+		if (!initialized) prevVisualFold = visualFold = targetFold;
+		float fold = visualFold;
 		float radius = restRadius(fold);
 		boolean hunting = e.getSyncedMode() == SpindleEntity.Mode.HUNT;
 
@@ -108,19 +116,23 @@ public class SpindleLegState {
 			float hipYm = MathHelper.lerp(fold, -60f, 6f) + 3f - groundOffset * 16f;
 			hip[i] = pos.add(mirror(modelToWorld(s * 8f, hipYm, HIP_Z[i % 3], e.bodyYaw), hanging));
 			// Pick the resting spot; if the ground there is out of reach (cliff, deep hole), pull the foot inward.
+			// Pull the foot inward until it lands on real ground the leg can reach without passing
+			// through a wall (corridors, doorways, cave walls).
 			Vec3d chosen = null;
-			for (float pull : new float[]{1.0f, 0.8f, 0.6f, 0.45f}) {
+			Vec3d bodyPoint = pos.add(0, hanging ? 0.7 : Math.min(1.2, 0.3 + (1 - fold) * 3), 0);
+			for (float pull : new float[]{1.0f, 0.8f, 0.6f, 0.45f, 0.3f, 0.15f}) {
 				Vec3d off = modelToWorld(restModelX(i, radius * pull), 24, restModelZ(i, radius * pull), e.bodyYaw);
 				double hx = pos.x + off.x + lead.x;
 				double hz = pos.z + off.z + lead.z;
 				double gy = hanging ? ceilingAt(world, hx, hz, pos.y + 2 * SpindleEntity.HANG_PIVOT) : groundAt(world, hx, hz, pos.y, folded);
+				if (Double.isNaN(gy)) continue;
 				Vec3d cand = new Vec3d(hx, gy, hz);
-				if (chosen == null) chosen = cand;
-				if (cand.distanceTo(hip[i]) <= reach) {
-					chosen = cand;
-					break;
-				}
+				if (cand.distanceTo(hip[i]) > reach) continue;
+				if (!hanging && !clearLine(world, e, bodyPoint, cand.add(0, 0.3, 0))) continue;
+				chosen = cand;
+				break;
 			}
+			if (chosen == null) chosen = new Vec3d(pos.x + lead.x, pos.y, pos.z + lead.z); // tuck under the body
 			home[i] = chosen;
 		}
 		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.25f || hanging != lastHanging;
@@ -188,7 +200,7 @@ public class SpindleLegState {
 				// Idle twitch: lift a leg and set it back down a little off.
 				Vec3d j = home[i].add((e.getRandom().nextFloat() - 0.5f) * 0.6, 0, (e.getRandom().nextFloat() - 0.5f) * 0.6);
 				double jy = hanging ? ceilingAt(world, j.x, j.z, pos.y + 2 * SpindleEntity.HANG_PIVOT) : groundAt(world, j.x, j.z, pos.y, folded);
-				startStep(i, new Vec3d(j.x, jy, j.z));
+				if (!Double.isNaN(jy)) startStep(i, new Vec3d(j.x, jy, j.z));
 			}
 		}
 
@@ -247,20 +259,61 @@ public class SpindleLegState {
 	public static double groundAt(World world, double x, double z, double refY, boolean folded) {
 		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refY);
 		BlockPos.Mutable m = new BlockPos.Mutable();
-		if (!folded) {
-			for (int y = by + 4; y >= by - 10; y--) {
+		m.set(bx, by, bz);
+		if (isSolid(world, m)) {
+			// A wall or a step at body level: only accept a low ledge it could step onto.
+			for (int y = by; y <= by + 2; y++) {
 				double top = walkableTop(world, m, bx, y, bz);
 				if (top != Double.NEGATIVE_INFINITY) return top;
 			}
+			return Double.NaN;
+		}
+		if (!folded) {
+			// Open here. Look no higher than the local ceiling (never on the floor upstairs), then down.
+			int top = by;
+			while (top < by + 4) {
+				m.set(bx, top + 1, bz);
+				if (isSolid(world, m)) break;
+				top++;
+			}
+			for (int y = top; y >= by - 10; y--) {
+				double t = walkableTop(world, m, bx, y, bz);
+				if (t != Double.NEGATIVE_INFINITY) return t;
+			}
 			return by - 10;
 		}
-		for (int d = 0; d <= 3; d++) {
-			for (int sign : (d == 0 ? new int[]{1} : new int[]{-1, 1})) {
-				double top = walkableTop(world, m, bx, by + d * sign, bz);
-				if (top != Double.NEGATIVE_INFINITY) return top;
-			}
+		for (int d = 1; d <= 3; d++) {
+			double t = walkableTop(world, m, bx, by - d, bz);
+			if (t != Double.NEGATIVE_INFINITY) return t;
 		}
-		return refY;
+		return Double.NaN;
+	}
+
+	/** Clear line between two points (no blocks with collision in between). */
+	private static boolean clearLine(World world, SpindleEntity e, Vec3d a, Vec3d b) {
+		return world.raycast(new net.minecraft.world.RaycastContext(a, b, net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
+				net.minecraft.world.RaycastContext.FluidHandling.NONE, e)).getType() == net.minecraft.util.hit.HitResult.Type.MISS;
+	}
+
+	/** 1 = room to stand at full height, 0 = only room folded. Based on the lowest ceiling right around it. */
+	private static float headroomPosture(World world, Vec3d pos) {
+		int y0 = MathHelper.floor(pos.y);
+		int minH = 10;
+		BlockPos.Mutable m = new BlockPos.Mutable();
+		double[][] offs = {{0, 0}, {1.4, 0}, {-1.4, 0}, {0, 1.4}, {0, -1.4}};
+		for (double[] o : offs) {
+			int bx = MathHelper.floor(pos.x + o[0]), bz = MathHelper.floor(pos.z + o[1]);
+			m.set(bx, y0 + 1, bz);
+			if (isSolid(world, m) && (o[0] != 0 || o[1] != 0)) continue; // that's a wall, not a ceiling
+			int h = 0;
+			for (int y = y0; y <= y0 + 9; y++) {
+				m.set(bx, y, bz);
+				if (isSolid(world, m)) break;
+				h++;
+			}
+			minH = Math.min(minH, h);
+		}
+		return MathHelper.clamp((minH - 2.2f) / 5.7f, 0f, 1f);
 	}
 
 	private static double walkableTop(World world, BlockPos.Mutable m, int x, int y, int z) {

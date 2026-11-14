@@ -174,6 +174,7 @@ public class SpindleEntity extends HostileEntity {
 		this.goalSelector.add(0, new SwimGoal(this));
 		this.goalSelector.add(1, new SpindleFrozenGoal(this));
 		this.goalSelector.add(2, new SpindleDigGoal(this));
+		this.goalSelector.add(2, new net.minecraft.entity.ai.goal.LongDoorInteractGoal(this, true));
 		this.goalSelector.add(2, new SpindleRetreatGoal(this));
 		this.goalSelector.add(3, new SpindleTendrilGoal(this));
 		this.goalSelector.add(4, new SpindleHuntGoal(this));
@@ -227,6 +228,11 @@ public class SpindleEntity extends HostileEntity {
 		return getWorld().isSpaceEmpty(this, STANDING.getBoxAt(pos).expand(0.1, 0.0, 0.1));
 	}
 
+	/** Unfolding needs real room around it, not just exactly its hitbox, or it ends up wedged. */
+	private boolean hasRoomToStand(Vec3d pos) {
+		return getWorld().isSpaceEmpty(this, STANDING.getBoxAt(pos).expand(0.6, 0.0, 0.6).stretch(0, 0.6, 0));
+	}
+
 	private boolean canFoldAt(Vec3d pos) {
 		return getWorld().isSpaceEmpty(this, FOLDED.getBoxAt(pos));
 	}
@@ -236,14 +242,16 @@ public class SpindleEntity extends HostileEntity {
 		if (this.age % 4 != 0) return;
 		Path path = getNavigation().getCurrentPath();
 		if (isFolded()) {
-			if (!isHanging() && foldHoldTicks <= 0 && canStandAt(getPos()) && pathAheadAllowsStanding(path)) {
+			if (!isHanging() && foldHoldTicks <= 0 && hasRoomToStand(getPos()) && pathAheadAllowsStanding(path)) {
 				setFolded(false);
 			}
+		} else if (this.horizontalCollision && path != null && !path.isFinished()) {
+			requestFold(); // scraping a wall or a corner at full size: squeeze down
 		} else if (path != null && !path.isFinished()) {
 			// Approaching a gap it can't fit through at full height: fold before it gets there.
 			for (int i = path.getCurrentNodeIndex(); i < Math.min(path.getLength(), path.getCurrentNodeIndex() + 3); i++) {
 				Vec3d node = Vec3d.ofBottomCenter(path.getNode(i).getBlockPos());
-				if (!canStandAt(node) && canFoldAt(node)) {
+				if (!hasRoomToStand(node) && canFoldAt(node)) {
 					requestFold();
 					break;
 				}
@@ -256,7 +264,7 @@ public class SpindleEntity extends HostileEntity {
 		int start = path.getCurrentNodeIndex();
 		for (int i = start; i < Math.min(path.getLength(), start + 6); i++) {
 			PathNode node = path.getNode(i);
-			if (!canStandAt(Vec3d.ofBottomCenter(node.getBlockPos()))) return false;
+			if (!hasRoomToStand(Vec3d.ofBottomCenter(node.getBlockPos()))) return false;
 		}
 		return true;
 	}
@@ -277,7 +285,7 @@ public class SpindleEntity extends HostileEntity {
 
 	@Override
 	public boolean isClimbing() {
-		return this.dataTracker.get(CLIMBING);
+		return false; // no blind wall-climbing; it walks, steps 2 blocks, folds, opens doors and digs instead
 	}
 
 	@Override
@@ -301,7 +309,6 @@ public class SpindleEntity extends HostileEntity {
 	public void tick() {
 		super.tick();
 		if (!getWorld().isClient) {
-			this.dataTracker.set(CLIMBING, this.horizontalCollision && !frozen);
 			serverTick((ServerWorld) getWorld());
 		} else {
 			clientTick();
@@ -872,6 +879,14 @@ public class SpindleEntity extends HostileEntity {
 
 	public void rememberEntry(Vec3d pos) {
 		usedEntries.add(new Memory(pos, this.age + 6000));
+	}
+
+	public String debugLine(Entity viewer) {
+		String dest = destination == null ? "-" : String.format("%.0fm", Math.sqrt(squaredDistanceTo(destination)));
+		return String.format("%s %d%% | %s%s%s | stuck %d | dest %s | probe %s | %.0fm",
+				mode, (int) (getTensionFraction() * 100),
+				isFolded() ? "folded" : "standing", isHanging() ? " hanging" : "", frozen ? " FROZEN" : "",
+				stuckLevel, dest, tendril.getState(), Math.sqrt(squaredDistanceTo(viewer)));
 	}
 
 	// ================================================================ hanging from cave ceilings

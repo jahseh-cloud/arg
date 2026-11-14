@@ -121,7 +121,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 		tendril.visible = false;
 		probeSeg.visible = probeRing.visible = probeHead.visible = probeLens.visible = probePetal.visible = false;
 
-		float fold = MathHelper.lerp(tickDelta, entity.prevFoldProgress, entity.foldProgress);
+		float fold = MathHelper.lerp(tickDelta, entity.legs.prevVisualFold, entity.legs.visualFold);
 		float legScale = MathHelper.lerp(fold, 1.0f, 0.3f);
 		float speed = Math.min(1.0f, limbDistance * 1.6f);
 		float attack = entity.attackAnimTicks > 0 ? (entity.attackAnimTicks - tickDelta) / 12f : 0f;

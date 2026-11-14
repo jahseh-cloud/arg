@@ -139,6 +139,8 @@ public final class SpaceMap {
 	}
 
 	private static boolean isOpen(World world, BlockPos p) {
-		return world.getBlockState(p).getCollisionShape(world, p).isEmpty();
+		BlockState st = world.getBlockState(p);
+		if (st.getBlock() instanceof net.minecraft.block.DoorBlock && net.minecraft.block.DoorBlock.canOpenByHand(st)) return true;
+		return st.getCollisionShape(world, p).isEmpty();
 	}
 }

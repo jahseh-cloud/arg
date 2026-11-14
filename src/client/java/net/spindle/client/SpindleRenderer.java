@@ -62,7 +62,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		ModelPart seg = this.getModel().tendril;
 		RenderLayer cutout = RenderLayer.getEntityCutoutNoCull(TEXTURE);
 		Vec3d base = entity.getLerpedPos(tickDelta);
-		float fold = MathHelper.lerp(tickDelta, entity.prevFoldProgress, entity.foldProgress);
+		float fold = MathHelper.lerp(tickDelta, entity.legs.prevVisualFold, entity.legs.visualFold);
 		float bodyYawDeg = MathHelper.lerpAngleDegrees(tickDelta, entity.prevBodyYaw, entity.bodyYaw);
 		// Where the core actually is this frame (the body bobs, rides the terrain and folds).
 		boolean hanging = entity.isHanging();
