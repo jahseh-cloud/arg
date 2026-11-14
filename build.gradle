@@ -44,3 +44,8 @@ java {
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
 }
+
+// Lets CI type commands into the dev server console.
+tasks.matching { it.name == "runServer" }.configureEach {
+	standardInput = System.in
+}
