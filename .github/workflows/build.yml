@@ -33,15 +33,24 @@ jobs:
           [ -f smoke.log ] || exit 0
           msg=$(grep -iE "exception|error|caused by|SPINDLE|Smoke" -A3 smoke.log | grep -v "^\s*at " | head -120 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::error title=Smoke log::${msg}"
-      - name: publish jar to the latest-build release
+      - name: read version
+        if: success()
+        id: ver
+        run: echo "n=$(grep '^mod_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
+      - name: remove old unversioned release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release delete latest-build --cleanup-tag -y || true
+      - name: publish versioned release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-build
-          name: Latest build
-          body: "Built automatically from the newest commit. Put the jar in your mods folder with Fabric API (Minecraft 1.21.1)."
+          tag_name: v${{ steps.ver.outputs.n }}
+          name: Spindle v${{ steps.ver.outputs.n }}
+          body: "Put spindle-v${{ steps.ver.outputs.n }}.jar in your mods folder with Fabric API (Minecraft 1.21.1). Remove any older spindle jar first."
           make_latest: true
-          files: build/libs/spindle-*.jar
+          files: build/libs/spindle-v*.jar
       - uses: actions/upload-artifact@v7
         if: success()
         with:
