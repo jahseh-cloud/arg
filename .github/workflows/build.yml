@@ -1,6 +1,9 @@
 name: build
 on: [push, workflow_dispatch]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -20,6 +23,25 @@ jobs:
         run: |
           msg=$(grep -E "error:|\.java:[0-9]+|FAILURE|What went wrong|Could not" -A2 build.log | grep -v "^\s*at " | head -150 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::error title=Build failed::${msg}"
+      - name: server smoke test
+        run: |
+          set -o pipefail
+          ./ci/smoke.sh 2>&1 | tee smoke.log
+      - name: report smoke failure
+        if: failure()
+        run: |
+          [ -f smoke.log ] || exit 0
+          msg=$(grep -iE "exception|error|caused by|SPINDLE|Smoke" -A3 smoke.log | grep -v "^\s*at " | head -120 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+          echo "::error title=Smoke log::${msg}"
+      - name: publish jar to the latest-build release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest build
+          body: "Built automatically from the newest commit. Put the jar in your mods folder with Fabric API (Minecraft 1.21.1)."
+          make_latest: true
+          files: build/libs/spindle-*.jar
       - uses: actions/upload-artifact@v7
         if: success()
         with:
