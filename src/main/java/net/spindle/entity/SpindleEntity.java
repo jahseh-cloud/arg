@@ -118,7 +118,6 @@ public class SpindleEntity extends HostileEntity {
 	private int unreachableTicks;
 	private final List<StolenItem> stolen = new ArrayList<>();
 	public final TendrilController tendril = new TendrilController(this);
-	private boolean pathingAsFolded;
 	// movement / stuck recovery
 	@Nullable private Vec3d destination;
 	private final ArrayDeque<Vec3d> recentPositions = new ArrayDeque<>();
@@ -204,21 +203,6 @@ public class SpindleEntity extends HostileEntity {
 			this.calculateDimensions();
 		}
 		super.onTrackedDataSet(data);
-	}
-
-	/** While a path is being computed, report the folded size so routes fit 1x2 gaps. */
-	public void setPathingAsFolded(boolean v) {
-		pathingAsFolded = v;
-	}
-
-	@Override
-	public float getWidth() {
-		return pathingAsFolded ? FOLDED_WIDTH : super.getWidth();
-	}
-
-	@Override
-	public float getHeight() {
-		return pathingAsFolded ? FOLDED_HEIGHT : super.getHeight();
 	}
 
 	public boolean isFolded() {
