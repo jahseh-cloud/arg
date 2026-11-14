@@ -188,7 +188,7 @@ public class SpindleLegState {
 		if (!initialized) prevLegFold = legFold = targetLegFold;
 		float fold = legFold;
 		float radius = restRadius(fold);
-		float scale = scaleNow(fold);
+		float baseScale = scaleNow(fold);
 		boolean low = fold > 0.5f;
 		boolean hunting = e.getSyncedMode() == SpindleEntity.Mode.HUNT;
 
@@ -196,7 +196,7 @@ public class SpindleLegState {
 		stepLift = MathHelper.lerp(fold, 1.1f, 0.3f);
 		double stepDist = MathHelper.lerp(fold, 1.5, 0.45);
 		Vec3d lead = new Vec3d(vel.x, 0, vel.z).multiply(stepDuration * 1.3);
-		double l1 = UPPER_LEN * scale / 16.0, l2 = LOWER_LEN * scale / 16.0;
+		double l1 = UPPER_LEN * baseScale / 16.0, l2 = LOWER_LEN * baseScale / 16.0;
 		double reach = (l1 + l2) * 0.96;
 		float hipYm = bodyModelY(visualFold) + 3f - groundOffset * 16f;
 
@@ -321,7 +321,7 @@ public class SpindleLegState {
 			float chosenTilt = 0f, chosenScale = -1f;
 			search:
 			for (float shrink : SHRINK_STEPS) {
-				float sc = scale * shrink;
+				float sc = baseScale * shrink;
 				double a1 = UPPER_LEN * sc / 16.0, a2 = LOWER_LEN * sc / 16.0;
 				if (a1 + a2 < span * 1.02) {
 					// Can't get any shorter than this and still reach the foot.
@@ -341,7 +341,7 @@ public class SpindleLegState {
 					}
 				}
 			}
-			if (chosenScale < 0) chosenScale = scale * SHRINK_STEPS[SHRINK_STEPS.length - 1];
+			if (chosenScale < 0) chosenScale = baseScale * SHRINK_STEPS[SHRINK_STEPS.length - 1];
 			tiltTarget[i] = chosenTilt;
 			tilt[i] += (chosenTilt - tilt[i]) * 0.35f;
 			// Shrinking happens fast (no clipping), growing back slowly.
