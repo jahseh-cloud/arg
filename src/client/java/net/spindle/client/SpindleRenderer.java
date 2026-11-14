@@ -33,6 +33,19 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 	}
 
 	@Override
+	protected void setupTransforms(SpindleEntity entity, MatrixStack matrices, float animationProgress, float bodyYaw,
+								   float tickDelta, float scale) {
+		if (entity.isHanging()) {
+			// Upside down on the ceiling: mirror the whole model about a horizontal plane.
+			float pivot = (float) SpindleEntity.HANG_PIVOT;
+			matrices.translate(0f, pivot, 0f);
+			matrices.scale(1f, -1f, 1f);
+			matrices.translate(0f, -pivot, 0f);
+		}
+		super.setupTransforms(entity, matrices, animationProgress, bodyYaw, tickDelta, scale);
+	}
+
+	@Override
 	protected float getLyingAngle(SpindleEntity entity) {
 		return 0f; // it doesn't tip over when it dies; it just folds up
 	}
@@ -52,7 +65,9 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		float fold = MathHelper.lerp(tickDelta, entity.prevFoldProgress, entity.foldProgress);
 		float bodyYawDeg = MathHelper.lerpAngleDegrees(tickDelta, entity.prevBodyYaw, entity.bodyYaw);
 		// Where the core actually is this frame (the body bobs, rides the terrain and folds).
-		Vec3d core = base.add(SpindleLegState.modelToWorld(0, this.getModel().coreBottomY, 1, bodyYawDeg));
+		boolean hanging = entity.isHanging();
+		Vec3d core = base.add(SpindleLegState.mirror(
+				SpindleLegState.modelToWorld(0, this.getModel().coreBottomY, 1, bodyYawDeg), hanging));
 		float time = entity.age + tickDelta;
 		int overlay = OverlayTexture.DEFAULT_UV;
 
@@ -60,7 +75,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 
 		// Two short tendrils always hang from the underside of the core and sway.
 		float yawRad = bodyYawDeg * MathHelper.RADIANS_PER_DEGREE;
-		for (int i = 0; i < 2; i++) {
+		for (int i = 0; i < (hanging ? 0 : 2); i++) {
 			double side = i == 0 ? 0.22 : -0.22;
 			Vec3d start = core.add(Math.cos(yawRad) * side, 0.05, Math.sin(yawRad) * side);
 			double len = (1.2 + 0.25 * Math.sin(time * 0.07 + i * 2)) * (1.0 - fold * 0.6);
@@ -69,33 +84,135 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 					time + i * 17, 0.12, 0.9f, 0.35f);
 		}
 
-		// The reaching / searching tendril.
+		// The reaching / searching probe.
 		if (entity.isTendrilActive() && entity.clientTip != null && entity.prevClientTip != null) {
 			Vec3d tip = entity.prevClientTip.lerp(entity.clientTip, tickDelta);
-			boolean searching = entity.isTendrilSearching();
-			List<Vec3d> points = new ArrayList<>();
-			points.add(core);
-			points.addAll(entity.clientAnchors);
-			points.add(tip);
-			drawChain(points, base, matrices, vertexConsumers.getBuffer(cutout), seg, light, overlay, time,
-					searching ? 0.1 : 0.35, 1.5f, 0.45f);
-
-			if (searching) {
-				// The eye: a small glowing lens on the tip, pointing where it's looking.
-				Vec3d lookDir = entity.getTendrilLook();
-				if (lookDir.lengthSquared() < 1e-4) lookDir = new Vec3d(0, 0, 1);
-				lookDir = lookDir.normalize();
-				Vec3d eyeStart = tip.subtract(lookDir.multiply(0.1));
-				Vec3d eyeEnd = tip.add(lookDir.multiply(0.22));
-				float pulse = 0.75f + 0.25f * MathHelper.sin(time * 0.6f);
-				// Each layer's buffer is fetched right before it's used: fetching another layer ends the previous one.
-				drawSegment(eyeStart, eyeEnd, base, matrices, vertexConsumers.getBuffer(cutout), seg, light, overlay, 1.9f, -1);
-				drawSegment(eyeStart, eyeEnd, base, matrices, vertexConsumers.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW)),
-						seg, 0xF000F0, overlay, 2.4f * pulse, colorGray(pulse));
-			}
+			List<Vec3d> controls = new ArrayList<>();
+			controls.add(core);
+			controls.addAll(entity.clientAnchors);
+			controls.add(tip);
+			renderProbe(entity, controls, base, matrices, vertexConsumers, cutout, light, overlay, time);
 		}
 
 		seg.visible = false;
+	}
+
+	/**
+	 * The probe: a smooth, ribbed mechanical cable following the body's bends (Catmull-Rom spline),
+	 * ending in a head with a glowing lens and three petals that breathe while searching and flare
+	 * open when it finds you.
+	 */
+	private void renderProbe(SpindleEntity entity, List<Vec3d> controls, Vec3d base, MatrixStack matrices,
+							 VertexConsumerProvider vcp, RenderLayer cutout, int light, int overlay, float time) {
+		SpindleModel model = this.getModel();
+		boolean searching = entity.isTendrilSearching();
+		boolean alert = entity.isTendrilAlert();
+		List<Vec3d> pts = spline(controls, 0.3);
+		if (pts.size() < 2) return;
+
+		// Tiny mechanical tremor while searching; more whip when reaching.
+		double amp = alert ? 0.05 : (searching ? 0.035 : 0.18);
+		int n = pts.size();
+		for (int i = 1; i < n - 1; i++) {
+			double u = i / (double) (n - 1);
+			double env = Math.sin(Math.PI * u);
+			pts.set(i, pts.get(i).add(Math.sin(i * 0.9 + time * 0.5) * amp * env,
+					Math.cos(i * 0.7 + time * 0.37) * amp * env, Math.sin(i * 1.3 - time * 0.41) * amp * env));
+		}
+
+		VertexConsumer vc = vcp.getBuffer(cutout);
+		model.probeSeg.visible = model.probeRing.visible = model.probeHead.visible = model.probePetal.visible = true;
+		double arc = 0, nextRing = 0.6;
+		for (int i = 0; i < n - 1; i++) {
+			Vec3d a = pts.get(i), b = pts.get(i + 1);
+			float u = i / (float) (n - 1);
+			drawSegment(a, b, base, matrices, vc, model.probeSeg, light, overlay, MathHelper.lerp(u, 1.35f, 0.75f), -1);
+			arc += a.distanceTo(b);
+			if (arc >= nextRing && i < n - 3) {
+				nextRing += 0.75;
+				drawPart(b, b.subtract(a), base, matrices, vc, model.probeRing, light, overlay, MathHelper.lerp(u, 1.2f, 0.8f), 0, 0);
+			}
+		}
+
+		// Head, pointing where it looks (or along the cable when just reaching).
+		Vec3d tip = pts.get(n - 1);
+		Vec3d dir = searching || alert ? entity.getTendrilLook() : tip.subtract(pts.get(n - 2));
+		if (dir.lengthSquared() < 1e-6) dir = tip.subtract(pts.get(n - 2));
+		dir = dir.normalize();
+		Vec3d headStart = tip.subtract(dir.multiply(0.12));
+		drawPart(headStart, dir, base, matrices, vc, model.probeHead, light, overlay, 1f, 0, 0);
+
+		float open = alert ? 1.05f : (searching ? 0.35f + 0.18f * MathHelper.sin(time * 0.12f) : 0.08f);
+		for (int k = 0; k < 3; k++) {
+			float roll = k * (float) (Math.PI * 2 / 3) + (searching ? time * 0.01f : 0f);
+			drawPetal(headStart, dir, base, matrices, vc, model.probePetal, light, overlay, roll, open);
+		}
+		model.probeSeg.visible = model.probeRing.visible = model.probeHead.visible = model.probePetal.visible = false;
+
+		// Lens (dark glass), then its glow and a soft halo in the emissive layer.
+		model.probeLens.visible = true;
+		Vec3d lensPos = headStart.add(dir.multiply(6.0 / 16.0));
+		drawPart(lensPos, dir, base, matrices, vcp.getBuffer(cutout), model.probeLens, light, overlay, 1f, 0, 0);
+		if (searching || alert) {
+			float pulse = alert ? 0.85f + 0.15f * MathHelper.sin(time * 2.1f) : 0.6f + 0.25f * MathHelper.sin(time * 0.25f);
+			VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW));
+			drawPart(lensPos.add(dir.multiply(0.01)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay, 1.05f, 0, colorGray(pulse));
+			drawPart(lensPos.add(dir.multiply(0.02)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay,
+					alert ? 3.2f : 2.4f, 0, colorGray(pulse * 0.22f));
+		}
+		model.probeLens.visible = false;
+	}
+
+	/** Places a model part at {@code at}, its +Z axis pointing along {@code dir}. */
+	private static void drawPart(Vec3d at, Vec3d dir, Vec3d base, MatrixStack matrices, VertexConsumer vc, ModelPart part,
+								 int light, int overlay, float scale, float roll, int color) {
+		matrices.push();
+		matrices.translate(at.x - base.x, at.y - base.y, at.z - base.z);
+		matrices.multiply(RotationAxis.POSITIVE_Y.rotation((float) Math.atan2(dir.x, dir.z)));
+		matrices.multiply(RotationAxis.POSITIVE_X.rotation((float) -Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z))));
+		if (roll != 0) matrices.multiply(RotationAxis.POSITIVE_Z.rotation(roll));
+		matrices.scale(scale, scale, scale);
+		part.render(matrices, vc, light, overlay, color == 0 ? -1 : color);
+		matrices.pop();
+	}
+
+	private static void drawPetal(Vec3d headStart, Vec3d dir, Vec3d base, MatrixStack matrices, VertexConsumer vc,
+								  ModelPart petal, int light, int overlay, float roll, float open) {
+		matrices.push();
+		matrices.translate(headStart.x - base.x, headStart.y - base.y, headStart.z - base.z);
+		matrices.multiply(RotationAxis.POSITIVE_Y.rotation((float) Math.atan2(dir.x, dir.z)));
+		matrices.multiply(RotationAxis.POSITIVE_X.rotation((float) -Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z))));
+		matrices.multiply(RotationAxis.POSITIVE_Z.rotation(roll));
+		matrices.translate(0, 2.3 / 16.0, 4.5 / 16.0);                      // on the rim, near the front
+		matrices.multiply(RotationAxis.POSITIVE_X.rotation(-open));        // flare outward
+		petal.render(matrices, vc, light, overlay);
+		matrices.pop();
+	}
+
+	/** Uniform Catmull-Rom spline through the control points, sampled roughly every {@code step} blocks. */
+	private static List<Vec3d> spline(List<Vec3d> c, double step) {
+		List<Vec3d> out = new ArrayList<>();
+		int m = c.size();
+		if (m == 2) {
+			double len = c.get(0).distanceTo(c.get(1));
+			int k = Math.max(2, (int) Math.ceil(len / step));
+			for (int j = 0; j <= k; j++) out.add(c.get(0).lerp(c.get(1), j / (double) k));
+			return out;
+		}
+		for (int i = 0; i < m - 1; i++) {
+			Vec3d p0 = c.get(Math.max(0, i - 1)), p1 = c.get(i), p2 = c.get(i + 1), p3 = c.get(Math.min(m - 1, i + 2));
+			int k = Math.max(2, (int) Math.ceil(p1.distanceTo(p2) / step));
+			for (int j = (i == 0 ? 0 : 1); j <= k; j++) {
+				double t = j / (double) k, t2 = t * t, t3 = t2 * t;
+				out.add(p1.multiply(2)
+						.add(p2.subtract(p0).multiply(t))
+						.add(p0.multiply(2).subtract(p1.multiply(5)).add(p2.multiply(4)).subtract(p3).multiply(t2))
+						.add(p1.multiply(3).subtract(p0).subtract(p2.multiply(3)).add(p3).multiply(t3))
+						.multiply(0.5));
+			}
+			if (out.size() > 160) break;
+		}
+		return out;
 	}
 
 	/**

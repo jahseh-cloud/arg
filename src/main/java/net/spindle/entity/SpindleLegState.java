@@ -36,6 +36,7 @@ public class SpindleLegState {
 	public float roll, prevRoll;
 	private boolean initialized;
 	private float lastPlantFold;
+	private boolean lastHanging;
 	private static final float[] HIP_Z = {-9f, 0f, 9f};
 	private static final float LEG_REACH_PX = 84f + 120f;
 
@@ -65,6 +66,15 @@ public class SpindleLegState {
 		return new Vec3d(lx * c + lz * s, ly, -lx * s + lz * c);
 	}
 
+	/** Upside down (hanging from a ceiling): the whole model is mirrored about a horizontal plane. */
+	public static Vec3d mirror(Vec3d off, boolean hanging) {
+		return hanging ? new Vec3d(off.x, 2 * SpindleEntity.HANG_PIVOT - off.y, off.z) : off;
+	}
+
+	public static Vec3d worldToModel(Vec3d d, float bodyYawDeg, boolean hanging) {
+		return worldToModel(mirror(d, hanging), bodyYawDeg);
+	}
+
 	/** Inverse of {@link #modelToWorld}: world offset from the entity's feet -> model-space pixels. */
 	public static Vec3d worldToModel(Vec3d d, float bodyYawDeg) {
 		double t = Math.toRadians(180.0 - bodyYawDeg);
@@ -88,6 +98,7 @@ public class SpindleLegState {
 		Vec3d lead = new Vec3d(vel.x, 0, vel.z).multiply(stepDuration * 1.3);
 
 		boolean folded = fold > 0.5f;
+		boolean hanging = e.isHanging();
 		float legScale = MathHelper.lerp(fold, 1.0f, 0.3f);
 		double reach = LEG_REACH_PX * legScale / 16.0 * 0.96;
 		Vec3d[] hip = new Vec3d[LEGS];
@@ -95,14 +106,15 @@ public class SpindleLegState {
 		for (int i = 0; i < LEGS; i++) {
 			float s = i < 3 ? 1f : -1f;
 			float hipYm = MathHelper.lerp(fold, -60f, 6f) + 3f - groundOffset * 16f;
-			hip[i] = pos.add(modelToWorld(s * 8f, hipYm, HIP_Z[i % 3], e.bodyYaw));
+			hip[i] = pos.add(mirror(modelToWorld(s * 8f, hipYm, HIP_Z[i % 3], e.bodyYaw), hanging));
 			// Pick the resting spot; if the ground there is out of reach (cliff, deep hole), pull the foot inward.
 			Vec3d chosen = null;
 			for (float pull : new float[]{1.0f, 0.8f, 0.6f, 0.45f}) {
 				Vec3d off = modelToWorld(restModelX(i, radius * pull), 24, restModelZ(i, radius * pull), e.bodyYaw);
 				double hx = pos.x + off.x + lead.x;
 				double hz = pos.z + off.z + lead.z;
-				Vec3d cand = new Vec3d(hx, groundAt(world, hx, hz, pos.y, folded), hz);
+				double gy = hanging ? ceilingAt(world, hx, hz, pos.y + 2 * SpindleEntity.HANG_PIVOT) : groundAt(world, hx, hz, pos.y, folded);
+				Vec3d cand = new Vec3d(hx, gy, hz);
 				if (chosen == null) chosen = cand;
 				if (cand.distanceTo(hip[i]) <= reach) {
 					chosen = cand;
@@ -111,8 +123,11 @@ public class SpindleLegState {
 			}
 			home[i] = chosen;
 		}
-		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.25f;
-		if (replantAll) lastPlantFold = fold;
+		boolean replantAll = Math.abs(fold - lastPlantFold) > 0.25f || hanging != lastHanging;
+		if (replantAll) {
+			lastPlantFold = fold;
+			lastHanging = hanging;
+		}
 
 		boolean teleported = false;
 		if (initialized) {
@@ -141,7 +156,7 @@ public class SpindleLegState {
 			float t = Math.min(1f, progress[i]);
 			float eased = t * t * (3f - 2f * t);
 			Vec3d p = from[i].lerp(to[i], eased);
-			foot[i] = p.add(0, MathHelper.sin(t * (float) Math.PI) * stepLift, 0);
+			foot[i] = p.add(0, MathHelper.sin(t * (float) Math.PI) * stepLift * (hanging ? -1 : 1), 0);
 			if (t >= 1f) {
 				stepping[i] = false;
 				foot[i] = to[i];
@@ -172,7 +187,8 @@ public class SpindleLegState {
 			} else if (idle && e.getRandom().nextFloat() < 0.003f) {
 				// Idle twitch: lift a leg and set it back down a little off.
 				Vec3d j = home[i].add((e.getRandom().nextFloat() - 0.5f) * 0.6, 0, (e.getRandom().nextFloat() - 0.5f) * 0.6);
-				startStep(i, new Vec3d(j.x, groundAt(world, j.x, j.z, pos.y, folded), j.z));
+				double jy = hanging ? ceilingAt(world, j.x, j.z, pos.y + 2 * SpindleEntity.HANG_PIVOT) : groundAt(world, j.x, j.z, pos.y, folded);
+				startStep(i, new Vec3d(j.x, jy, j.z));
 			}
 		}
 
@@ -180,6 +196,7 @@ public class SpindleLegState {
 		double sum = 0, front = 0, rear = 0, left = 0, right = 0;
 		for (int i = 0; i < LEGS; i++) {
 			double y = (stepping[i] ? to[i].y : foot[i].y) - pos.y;
+			if (hanging) y = 2 * SpindleEntity.HANG_PIVOT - y; // measured in the mirrored frame
 			sum += y;
 			if (i % 3 == 0) front += y;
 			if (i % 3 == 2) rear += y;
@@ -252,6 +269,21 @@ public class SpindleLegState {
 		if (top == Double.NEGATIVE_INFINITY) return top;
 		m.set(x, y + 1, z);
 		return isSolid(world, m) ? Double.NEGATIVE_INFINITY : top;
+	}
+
+	/** Underside of the ceiling above (x, z): a solid block with a flat bottom and open space below it. */
+	public static double ceilingAt(World world, double x, double z, double refTop) {
+		int bx = MathHelper.floor(x), bz = MathHelper.floor(z), by = MathHelper.floor(refTop);
+		BlockPos.Mutable m = new BlockPos.Mutable();
+		for (int y = by - 1; y <= by + 4; y++) {
+			m.set(bx, y, bz);
+			VoxelShape shape = world.getBlockState(m).getCollisionShape(world, m);
+			if (shape.isEmpty()) continue;
+			m.set(bx, y - 1, bz);
+			if (isSolid(world, m)) continue;
+			return y + shape.getMin(Direction.Axis.Y);
+		}
+		return refTop;
 	}
 
 	private static double surfaceTop(World world, BlockPos pos) {

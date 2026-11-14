@@ -51,11 +51,8 @@ public class SpindleRetreatGoal extends Goal {
 			return score;
 		});
 		if (spot != null) {
-			boolean ok = spindle.getNavigation().startMovingTo(spot.x, spot.y, spot.z, 1.5 * spindle.getSpeedFactor());
-			if (!ok && !spindle.isFolded()) {
-				spindle.requestFold();
-				repathTimer = 2;
-			}
+			boolean ok = spindle.travelTo(spot, 1.5);
+			if (!ok) repathTimer = 5;
 		}
 	}
 

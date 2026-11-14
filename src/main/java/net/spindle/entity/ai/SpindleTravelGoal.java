@@ -64,15 +64,12 @@ public class SpindleTravelGoal extends Goal {
 		Vec3d spot = spindle.randomGroundNear(new Vec3d(aim.x, here.y, aim.z), 0, 6);
 		if (spot == null) spot = spindle.randomGroundNear(new Vec3d(aim.x, quarry.getY(), aim.z), 0, 8);
 		if (spot == null) {
-			if (++stuck > 4 && !spindle.isFolded()) spindle.requestFold();
+			stuck++;
 			return;
 		}
 		stuck = 0;
-		boolean ok = spindle.getNavigation().startMovingTo(spot.x, spot.y, spot.z, 1.1 * spindle.getSpeedFactor());
-		if (!ok && !spindle.isFolded()) {
-			spindle.requestFold();
-			repathTimer = 2;
-		}
+		boolean ok = spindle.travelTo(spot, 1.1);
+		if (!ok) repathTimer = 5;
 	}
 
 	@Nullable

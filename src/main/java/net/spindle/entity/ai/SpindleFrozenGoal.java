@@ -17,7 +17,7 @@ public class SpindleFrozenGoal extends Goal {
 
 	@Override
 	public boolean canStart() {
-		return spindle.isFrozen();
+		return spindle.isFrozen() && !spindle.isHanging(); // hanging is already perfectly still
 	}
 
 	@Override

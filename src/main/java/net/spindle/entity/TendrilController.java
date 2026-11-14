@@ -52,9 +52,9 @@ public class TendrilController {
 	public enum State { IDLE, EXTENDING, SEARCHING, SPOTTED, HOLDING, RETRACTING }
 
 	public static final double MAX_LENGTH = 16.0;
-	public static final double MAX_SEARCH_LENGTH = 30.0;
-	private static final double SEARCH_RADIUS = 10.0;
-	private static final int MAX_SEARCH_NODES = 3000;
+	public static final double MAX_SEARCH_LENGTH = 36.0;
+	private static final double SEARCH_RADIUS = 14.0;
+	private static final int MAX_SEARCH_NODES = 6000;
 	private static final double PULL_SPEED = 0.38;
 
 	private final SpindleEntity owner;
@@ -175,6 +175,7 @@ public class TendrilController {
 		Vec3d core = owner.getCorePos();
 		Vec3d entry = findOpening(core, roughCenter, false, MAX_LENGTH);
 		if (entry == null) return false;
+		owner.rememberEntry(entry);
 		SearchArea a = SearchArea.build(this, BlockPos.ofFloored(entry), roughCenter);
 		if (a == null || a.size() < 6) return false;
 
@@ -234,7 +235,8 @@ public class TendrilController {
 				default -> {}
 			}
 		}
-		owner.syncTendril(state != State.IDLE, isSearching(), tip, look);
+		boolean alert = state == State.SPOTTED || state == State.HOLDING || (state == State.EXTENDING && area != null && target != null);
+		owner.syncTendril(state != State.IDLE, isSearching() || alert, alert, tip, look);
 		if (state != State.IDLE && --resyncTimer <= 0) {
 			anchorsDirty = true; // late joiners / players who just started tracking
 			resyncTimer = 40;
@@ -376,6 +378,7 @@ public class TendrilController {
 	private void startLooking() {
 		lookTicks = 40 + owner.getRandom().nextInt(40);
 		lookedAt.add(tip);
+		owner.rememberSearched(tip);
 		if (area != null) {
 			Vec3d toCenter = area.center.subtract(tip);
 			sweepBase = (float) Math.atan2(-toCenter.x, toCenter.z);
@@ -397,6 +400,8 @@ public class TendrilController {
 				Vec3d c = Vec3d.ofCenter(n);
 				double minSeen = 8;
 				for (Vec3d v : lookedAt) minSeen = Math.min(minSeen, v.distanceTo(c));
+				// Rooms it already cleared on earlier searches count too, so big buildings get worked through.
+				for (SpindleEntity.Memory m : owner.searchedSpots) minSeen = Math.min(minSeen, m.pos().distanceTo(c) + 1.5);
 				double score = minSeen * 2.0 + a.openness(n) * 0.25 - c.distanceTo(a.center) * 0.3
 						+ owner.getRandom().nextDouble();
 				if (score > best) {
@@ -703,6 +708,10 @@ public class TendrilController {
 			if (toOpening > maxLen) continue;
 			double len = toOpening + o.distanceTo(toward);
 			if (needLineToTarget && len > maxLen) continue;
+			if (!needLineToTarget) {
+				// Searching: prefer a way in it hasn't already tried recently.
+				for (SpindleEntity.Memory m : owner.usedEntries) if (m.pos().distanceTo(o) < 3) len += 8;
+			}
 			if (len >= bestLen) continue;
 			if (!passable(core, o)) continue;
 			if (needLineToTarget && !passable(o, toward)) continue;

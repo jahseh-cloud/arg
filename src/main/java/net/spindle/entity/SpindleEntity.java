@@ -44,7 +44,9 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.GameRules;
 import net.minecraft.world.RaycastContext;
 import net.minecraft.world.World;
+import net.spindle.entity.ai.SpindleDigGoal;
 import net.spindle.entity.ai.SpindleFrozenGoal;
+import net.spindle.entity.ai.SpindleLurkGoal;
 import net.spindle.entity.ai.SpindleHuntGoal;
 import net.spindle.entity.ai.SpindleRetreatGoal;
 import net.spindle.entity.ai.SpindleSnuffLightGoal;
@@ -55,6 +57,7 @@ import net.spindle.entity.ai.SpindleTravelGoal;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -88,11 +91,12 @@ public class SpindleEntity extends HostileEntity {
 	private static final TrackedData<Boolean> CLIMBING = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 	private static final TrackedData<Boolean> FOLDED_FLAG = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 	private static final TrackedData<Integer> MODE = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.INTEGER);
+	private static final TrackedData<Boolean> HANGING = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 	private static final TrackedData<Integer> TENDRIL_FLAGS = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.INTEGER);
 	private static final TrackedData<Vector3f> TENDRIL_TIP = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.VECTOR3F);
 	private static final TrackedData<Vector3f> TENDRIL_LOOK = DataTracker.registerData(SpindleEntity.class, TrackedDataHandlerRegistry.VECTOR3F);
 
-	public static final int TENDRIL_ACTIVE = 1, TENDRIL_SEARCHING = 2;
+	public static final int TENDRIL_ACTIVE = 1, TENDRIL_SEARCHING = 2, TENDRIL_ALERT = 4;
 
 	public enum Mode { WANDER, STALK, HUNT, RETREAT }
 
@@ -114,6 +118,16 @@ public class SpindleEntity extends HostileEntity {
 	private int unreachableTicks;
 	private final List<StolenItem> stolen = new ArrayList<>();
 	public final TendrilController tendril = new TendrilController(this);
+	private boolean pathingAsFolded;
+	// movement / stuck recovery
+	@Nullable private Vec3d destination;
+	private final ArrayDeque<Vec3d> recentPositions = new ArrayDeque<>();
+	private int stuckChecks;
+	private int stuckLevel;
+	// memory of where the probe has already looked and which ways in it used (expires)
+	public final List<Memory> searchedSpots = new ArrayList<>();
+	public final List<Memory> usedEntries = new ArrayList<>();
+	public record Memory(Vec3d pos, int expiresAt) {}
 
 	// ---------------------------------------------------------------- client state
 	public float foldProgress, prevFoldProgress;
@@ -151,6 +165,7 @@ public class SpindleEntity extends HostileEntity {
 		builder.add(FOLDED_FLAG, false);
 		builder.add(MODE, 0);
 		builder.add(TENDRIL_FLAGS, 0);
+		builder.add(HANGING, false);
 		builder.add(TENDRIL_TIP, new Vector3f());
 		builder.add(TENDRIL_LOOK, new Vector3f(0, 0, 1));
 	}
@@ -159,19 +174,21 @@ public class SpindleEntity extends HostileEntity {
 	protected void initGoals() {
 		this.goalSelector.add(0, new SwimGoal(this));
 		this.goalSelector.add(1, new SpindleFrozenGoal(this));
+		this.goalSelector.add(2, new SpindleDigGoal(this));
 		this.goalSelector.add(2, new SpindleRetreatGoal(this));
 		this.goalSelector.add(3, new SpindleTendrilGoal(this));
 		this.goalSelector.add(4, new SpindleHuntGoal(this));
 		this.goalSelector.add(5, new SpindleSnuffLightGoal(this));
-		this.goalSelector.add(6, new SpindleStalkGoal(this));
-		this.goalSelector.add(7, new SpindleTravelGoal(this));
-		this.goalSelector.add(8, new WanderAroundFarGoal(this, 0.7));
+		this.goalSelector.add(6, new SpindleLurkGoal(this));
+		this.goalSelector.add(7, new SpindleStalkGoal(this));
+		this.goalSelector.add(8, new SpindleTravelGoal(this));
+		this.goalSelector.add(9, new WanderAroundFarGoal(this, 0.7));
 		this.targetSelector.add(1, new SpindleTargetGoal(this));
 	}
 
 	@Override
 	protected EntityNavigation createNavigation(World world) {
-		return new SpiderNavigation(this, world);
+		return new SpindleNavigation(this, world);
 	}
 
 	// ================================================================ dimensions / folding
@@ -187,6 +204,21 @@ public class SpindleEntity extends HostileEntity {
 			this.calculateDimensions();
 		}
 		super.onTrackedDataSet(data);
+	}
+
+	/** While a path is being computed, report the folded size so routes fit 1x2 gaps. */
+	public void setPathingAsFolded(boolean v) {
+		pathingAsFolded = v;
+	}
+
+	@Override
+	public float getWidth() {
+		return pathingAsFolded ? FOLDED_WIDTH : super.getWidth();
+	}
+
+	@Override
+	public float getHeight() {
+		return pathingAsFolded ? FOLDED_HEIGHT : super.getHeight();
 	}
 
 	public boolean isFolded() {
@@ -220,12 +252,12 @@ public class SpindleEntity extends HostileEntity {
 		if (this.age % 4 != 0) return;
 		Path path = getNavigation().getCurrentPath();
 		if (isFolded()) {
-			if (foldHoldTicks <= 0 && canStandAt(getPos()) && pathAheadAllowsStanding(path)) {
+			if (!isHanging() && foldHoldTicks <= 0 && canStandAt(getPos()) && pathAheadAllowsStanding(path)) {
 				setFolded(false);
 			}
 		} else if (path != null && !path.isFinished()) {
 			// Approaching a gap it can't fit through at full height: fold before it gets there.
-			for (int i = path.getCurrentNodeIndex(); i < Math.min(path.getLength(), path.getCurrentNodeIndex() + 2); i++) {
+			for (int i = path.getCurrentNodeIndex(); i < Math.min(path.getLength(), path.getCurrentNodeIndex() + 3); i++) {
 				Vec3d node = Vec3d.ofBottomCenter(path.getNode(i).getBlockPos());
 				if (!canStandAt(node) && canFoldAt(node)) {
 					requestFold();
@@ -238,14 +270,18 @@ public class SpindleEntity extends HostileEntity {
 	private boolean pathAheadAllowsStanding(@Nullable Path path) {
 		if (path == null || path.isFinished()) return true;
 		int start = path.getCurrentNodeIndex();
-		for (int i = start; i < Math.min(path.getLength(), start + 4); i++) {
+		for (int i = start; i < Math.min(path.getLength(), start + 6); i++) {
 			PathNode node = path.getNode(i);
 			if (!canStandAt(Vec3d.ofBottomCenter(node.getBlockPos()))) return false;
 		}
 		return true;
 	}
 
+	/** Mirror plane height when hanging upside down (half the folded hitbox). */
+	public static final double HANG_PIVOT = FOLDED_HEIGHT / 2.0;
+
 	public double getCoreHeight() {
+		if (isHanging()) return 2 * HANG_PIVOT - CORE_HEIGHT_FOLDED;
 		return isFolded() ? CORE_HEIGHT_FOLDED : CORE_HEIGHT_STANDING;
 	}
 
@@ -294,7 +330,10 @@ public class SpindleEntity extends HostileEntity {
 		recentDamage = Math.max(0f, recentDamage - 0.05f);
 		if (attackCooldown > 0) attackCooldown--;
 		updateMode(world);
+		if (isHanging() && mode != Mode.STALK) setHanging(false); // drops down to hunt / flee
 		updateFold();
+		tickStuck();
+		tickMemory();
 		tendril.tick(world);
 		tickStolenItems(world);
 
@@ -549,6 +588,7 @@ public class SpindleEntity extends HostileEntity {
 	}
 
 	private void startRetreat(int ticks) {
+		setHanging(false);
 		mode = Mode.RETREAT;
 		retreatTicks = ticks;
 		tendril.forceRelease();
@@ -567,6 +607,7 @@ public class SpindleEntity extends HostileEntity {
 		boolean result = super.damage(source, amount);
 		if (result && !getWorld().isClient) {
 			recentDamage += amount;
+			if (isHanging()) setHanging(false);
 			if (frozen) gazeDamage += amount;
 			tendril.onOwnerDamaged(amount);
 			if (source.getAttacker() instanceof PlayerEntity player && !player.isCreative() && mode != Mode.RETREAT) {
@@ -683,15 +724,20 @@ public class SpindleEntity extends HostileEntity {
 
 	// ================================================================ tendril sync
 
-	public void syncTendril(boolean active, boolean searching, Vec3d tip, Vec3d look) {
+	public void syncTendril(boolean active, boolean searching, boolean alert, Vec3d tip, Vec3d look) {
 		int flags = 0;
 		if (active) flags |= TENDRIL_ACTIVE;
 		if (searching) flags |= TENDRIL_SEARCHING;
+		if (alert) flags |= TENDRIL_ALERT;
 		this.dataTracker.set(TENDRIL_FLAGS, flags);
 		if (active) {
 			this.dataTracker.set(TENDRIL_TIP, tip.toVector3f());
 			this.dataTracker.set(TENDRIL_LOOK, look.toVector3f());
 		}
+	}
+
+	public boolean isTendrilAlert() {
+		return (getTendrilFlags() & TENDRIL_ALERT) != 0;
 	}
 
 	public boolean isTendrilSearching() {
@@ -766,6 +812,103 @@ public class SpindleEntity extends HostileEntity {
 		return isFolded() ? 0.8 : 1.0;
 	}
 
+	// ================================================================ movement helpers / stuck recovery
+
+	/** All goals move through here so the stuck detector knows where it's trying to go. */
+	public boolean travelTo(Vec3d dest, double speed) {
+		destination = dest;
+		return getNavigation().startMovingTo(dest.x, dest.y, dest.z, speed * getSpeedFactor());
+	}
+
+	public void setDestination(@Nullable Vec3d dest) {
+		destination = dest;
+	}
+
+	@Nullable
+	public Vec3d getDestination() {
+		return destination;
+	}
+
+	public int getStuckLevel() {
+		return stuckLevel;
+	}
+
+	public void clearStuck() {
+		stuckLevel = 0;
+		stuckChecks = 0;
+		recentPositions.clear();
+	}
+
+	/**
+	 * Every second: if it's trying to get somewhere but hasn't moved a block in 3 seconds, escalate:
+	 * 1 = fold and re-plan, 2 = back off and come at it from somewhere else, 3 = dig (SpindleDigGoal).
+	 */
+	private void tickStuck() {
+		if (this.age % 20 != 0) return;
+		boolean busy = frozen || isHanging() || !tendril.isIdle();
+		if (destination == null || busy || squaredDistanceTo(destination) < 3.0 * 3.0) {
+			if (destination != null && squaredDistanceTo(destination) < 3.0 * 3.0) destination = null;
+			if (stuckLevel < 3) clearStuck();
+			return;
+		}
+		recentPositions.addLast(getPos());
+		while (recentPositions.size() > 4) recentPositions.removeFirst();
+		if (recentPositions.size() < 4) return;
+		double moved = recentPositions.getFirst().distanceTo(recentPositions.getLast());
+		if (moved > 1.5) {
+			stuckChecks = 0;
+			if (stuckLevel < 3) stuckLevel = 0;
+			return;
+		}
+		stuckChecks++;
+		if (stuckLevel == 0 && stuckChecks >= 1) {
+			stuckLevel = 1;
+			requestFold();
+			getNavigation().startMovingTo(destination.x, destination.y, destination.z, getSpeedFactor());
+		} else if (stuckLevel == 1 && stuckChecks >= 4) {
+			stuckLevel = 2;
+			Vec3d away = randomGroundNear(getPos(), 4, 9);
+			if (away != null) getNavigation().startMovingTo(away.x, away.y, away.z, 1.2);
+		} else if (stuckLevel == 2 && stuckChecks >= 7) {
+			stuckLevel = canGrief() ? 3 : 0;
+			if (stuckLevel == 0) stuckChecks = 0;
+		}
+	}
+
+	private void tickMemory() {
+		if (this.age % 100 != 0) return;
+		searchedSpots.removeIf(m -> m.expiresAt() < this.age);
+		usedEntries.removeIf(m -> m.expiresAt() < this.age);
+		while (searchedSpots.size() > 96) searchedSpots.remove(0);
+	}
+
+	public void rememberSearched(Vec3d pos) {
+		searchedSpots.add(new Memory(pos, this.age + 6000));
+	}
+
+	public void rememberEntry(Vec3d pos) {
+		usedEntries.add(new Memory(pos, this.age + 6000));
+	}
+
+	// ================================================================ hanging from cave ceilings
+
+	public boolean isHanging() {
+		return this.dataTracker.get(HANGING);
+	}
+
+	public void setHanging(boolean hanging) {
+		if (hanging == isHanging()) return;
+		this.dataTracker.set(HANGING, hanging);
+		setNoGravity(hanging);
+		if (hanging) {
+			requestFold();
+			foldHoldTicks = Integer.MAX_VALUE / 2;
+			setVelocity(Vec3d.ZERO);
+		} else {
+			foldHoldTicks = 40;
+		}
+	}
+
 	// ================================================================ sounds
 
 	@Nullable
@@ -822,6 +965,7 @@ public class SpindleEntity extends HostileEntity {
 		nbt.putString("Mode", mode.name());
 		nbt.putInt("RetreatTicks", retreatTicks);
 		nbt.putBoolean("Folded", isFolded());
+		nbt.putBoolean("Hanging", isHanging());
 		NbtList list = new NbtList();
 		for (StolenItem s : stolen) {
 			if (s.stack.isEmpty()) continue;
@@ -845,6 +989,7 @@ public class SpindleEntity extends HostileEntity {
 		}
 		retreatTicks = nbt.getInt("RetreatTicks");
 		this.dataTracker.set(FOLDED_FLAG, nbt.getBoolean("Folded"));
+		if (nbt.getBoolean("Hanging")) setHanging(true);
 		stolen.clear();
 		NbtList list = nbt.getList("Stolen", NbtElement.COMPOUND_TYPE);
 		for (int i = 0; i < list.size(); i++) {

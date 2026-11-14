@@ -52,18 +52,12 @@ public class SpindleHuntGoal extends Goal {
 
 		if (--repathTimer <= 0) {
 			repathTimer = 10;
+			spindle.setDestination(target.getPos());
 			Path path = spindle.getNavigation().findPathTo(target, 0);
 			boolean reaches = path != null && path.reachesTarget();
-			if (reaches) {
-				spindle.getNavigation().startMovingAlong(path, 1.35 * spindle.getSpeedFactor());
-				spindle.markUnreachable(false);
-			} else if (!spindle.isFolded()) {
-				spindle.requestFold();
-				repathTimer = 1;
-			} else {
-				spindle.markUnreachable(true);
-				if (path != null) spindle.getNavigation().startMovingAlong(path, 1.2 * spindle.getSpeedFactor());
-			}
+			// Routes are planned at folded size, so "no path" really means no way through on foot.
+			spindle.markUnreachable(!reaches);
+			if (path != null) spindle.getNavigation().startMovingAlong(path, (reaches ? 1.35 : 1.2) * spindle.getSpeedFactor());
 		}
 
 		if (spindle.canMeleeNow() && spindle.isInMeleeReach(target) && spindle.canSee(target)) {

@@ -35,6 +35,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 	private final ModelPart[] armUpper = new ModelPart[2];
 	private final ModelPart[] armLower = new ModelPart[2];
 	public final ModelPart tendril;
+	public final ModelPart probeSeg, probeRing, probeHead, probeLens, probePetal;
 
 	private float tickDelta;
 	/** Model-space Y of the underside of the core, from the last setAngles call (used by the renderer). */
@@ -52,6 +53,11 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 			armLower[i] = root.getChild("arm" + i + "_lower");
 		}
 		this.tendril = root.getChild("tendril");
+		this.probeSeg = root.getChild("probe_seg");
+		this.probeRing = root.getChild("probe_ring");
+		this.probeHead = root.getChild("probe_head");
+		this.probeLens = root.getChild("probe_lens");
+		this.probePetal = root.getChild("probe_petal");
 	}
 
 	public static TexturedModelData getTexturedModelData() {
@@ -90,6 +96,13 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 						.uv(200, 24).cuboid(-1f, -1f, 0f, 2f, 2f, 16f),
 				ModelTransform.NONE);
 
+		// Probe parts (mechanical reaching/searching tendril). Drawn piece by piece by the renderer.
+		r.addChild("probe_seg", ModelPartBuilder.create().uv(0, 300).cuboid(-1f, -1f, 0f, 2f, 2f, 16f), ModelTransform.NONE);
+		r.addChild("probe_ring", ModelPartBuilder.create().uv(40, 300).cuboid(-1.6f, -1.6f, -0.75f, 3.2f, 3.2f, 1.5f), ModelTransform.NONE);
+		r.addChild("probe_head", ModelPartBuilder.create().uv(56, 300).cuboid(-2.5f, -2.5f, 0f, 5f, 5f, 6f), ModelTransform.NONE);
+		r.addChild("probe_lens", ModelPartBuilder.create().uv(80, 300).cuboid(-1.8f, -1.8f, 0f, 3.6f, 3.6f, 0.6f), ModelTransform.NONE);
+		r.addChild("probe_petal", ModelPartBuilder.create().uv(96, 300).cuboid(-0.75f, -0.4f, 0f, 1.5f, 0.8f, 5f), ModelTransform.NONE);
+
 		return TexturedModelData.of(data, 256, 512);
 	}
 
@@ -106,6 +119,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 	@Override
 	public void setAngles(SpindleEntity entity, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
 		tendril.visible = false;
+		probeSeg.visible = probeRing.visible = probeHead.visible = probeLens.visible = probePetal.visible = false;
 
 		float fold = MathHelper.lerp(tickDelta, entity.prevFoldProgress, entity.foldProgress);
 		float legScale = MathHelper.lerp(fold, 1.0f, 0.3f);
@@ -144,7 +158,7 @@ public class SpindleModel extends SinglePartEntityModel<SpindleEntity> {
 			float fx, fy, fz;
 			if (legs.isReady()) {
 				Vec3d footWorld = legs.prevFoot[i].lerp(legs.foot[i], tickDelta);
-				Vec3d m = SpindleLegState.worldToModel(footWorld.subtract(base), bodyYaw);
+				Vec3d m = SpindleLegState.worldToModel(footWorld.subtract(base), bodyYaw, entity.isHanging());
 				fx = (float) m.x;
 				fy = (float) m.y;
 				fz = (float) m.z;
