@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleModel> {
+	/** Size of the probe's head relative to the model. */
+	private static final float HEAD = 1.6f;
 	private static final Identifier TEXTURE = Spindle.id("textures/entity/spindle.png");
 
 	public SpindleRenderer(EntityRendererFactory.Context context) {
@@ -126,11 +128,11 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		for (int i = 0; i < n - 1; i++) {
 			Vec3d a = pts.get(i), b = pts.get(i + 1);
 			float u = i / (float) (n - 1);
-			drawSegment(a, b, base, matrices, vc, model.probeSeg, light, overlay, MathHelper.lerp(u, 1.35f, 0.75f), -1);
+			drawSegment(a, b, base, matrices, vc, model.probeSeg, light, overlay, MathHelper.lerp(u, 2.3f, 1.3f), -1);
 			arc += a.distanceTo(b);
 			if (arc >= nextRing && i < n - 3) {
 				nextRing += 0.75;
-				drawPart(b, b.subtract(a), base, matrices, vc, model.probeRing, light, overlay, MathHelper.lerp(u, 1.2f, 0.8f), 0, 0);
+				drawPart(b, b.subtract(a), base, matrices, vc, model.probeRing, light, overlay, MathHelper.lerp(u, 1.9f, 1.25f), 0, 0);
 			}
 		}
 
@@ -140,7 +142,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		if (dir.lengthSquared() < 1e-6) dir = tip.subtract(pts.get(n - 2));
 		dir = dir.normalize();
 		Vec3d headStart = tip.subtract(dir.multiply(0.12));
-		drawPart(headStart, dir, base, matrices, vc, model.probeHead, light, overlay, 1f, 0, 0);
+		drawPart(headStart, dir, base, matrices, vc, model.probeHead, light, overlay, HEAD, 0, 0);
 
 		float open = alert ? 1.05f : (searching ? 0.35f + 0.18f * MathHelper.sin(time * 0.12f) : 0.08f);
 		for (int k = 0; k < 3; k++) {
@@ -151,14 +153,14 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 
 		// Lens (dark glass), then its glow and a soft halo in the emissive layer.
 		model.probeLens.visible = true;
-		Vec3d lensPos = headStart.add(dir.multiply(6.0 / 16.0));
-		drawPart(lensPos, dir, base, matrices, vcp.getBuffer(cutout), model.probeLens, light, overlay, 1f, 0, 0);
+		Vec3d lensPos = headStart.add(dir.multiply(6.0 * HEAD / 16.0));
+		drawPart(lensPos, dir, base, matrices, vcp.getBuffer(cutout), model.probeLens, light, overlay, HEAD, 0, 0);
 		if (searching || alert) {
 			float pulse = alert ? 0.85f + 0.15f * MathHelper.sin(time * 2.1f) : 0.6f + 0.25f * MathHelper.sin(time * 0.25f);
 			VertexConsumer glow = vcp.getBuffer(RenderLayer.getEyes(SpindleCoreFeature.GLOW));
-			drawPart(lensPos.add(dir.multiply(0.01)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay, 1.05f, 0, colorGray(pulse));
+			drawPart(lensPos.add(dir.multiply(0.01)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay, 1.05f * HEAD, 0, colorGray(pulse));
 			drawPart(lensPos.add(dir.multiply(0.02)), dir, base, matrices, glow, model.probeLens, 0xF000F0, overlay,
-					alert ? 3.2f : 2.4f, 0, colorGray(pulse * 0.22f));
+					(alert ? 3.2f : 2.4f) * HEAD, 0, colorGray(pulse * 0.22f));
 		}
 		model.probeLens.visible = false;
 	}
@@ -183,6 +185,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		matrices.multiply(RotationAxis.POSITIVE_Y.rotation((float) Math.atan2(dir.x, dir.z)));
 		matrices.multiply(RotationAxis.POSITIVE_X.rotation((float) -Math.atan2(dir.y, Math.sqrt(dir.x * dir.x + dir.z * dir.z))));
 		matrices.multiply(RotationAxis.POSITIVE_Z.rotation(roll));
+		matrices.scale(HEAD, HEAD, HEAD);
 		matrices.translate(0, 2.3 / 16.0, 4.5 / 16.0);                      // on the rim, near the front
 		matrices.multiply(RotationAxis.POSITIVE_X.rotation(-open));        // flare outward
 		petal.render(matrices, vc, light, overlay);

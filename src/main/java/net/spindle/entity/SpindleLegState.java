@@ -183,7 +183,7 @@ public class SpindleLegState {
 		visualFold += (targetFold - visualFold) * (e.isDead() ? 0.12f : 0.3f);
 		if (!initialized) prevVisualFold = visualFold = targetFold;
 		prevLegFold = legFold;
-		float targetLegFold = hanging ? 0.55f : visualFold;
+		float targetLegFold = hanging ? 0.72f : visualFold;
 		legFold += (targetLegFold - legFold) * 0.3f;
 		if (!initialized) prevLegFold = legFold = targetLegFold;
 		float fold = legFold;
