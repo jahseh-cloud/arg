@@ -61,7 +61,7 @@ final class WorldTests {
 			int far = countSolid(world, 1060, 8, 16, 150, 250);
 			int near = countSolid(world, 960, 8, 16, 220, 250);
 			int edge = countSolid(world, 1025, 8, 2, 70, 140);
-			boolean ok = far > 3000 && near < 200 && edge > 100;
+			boolean ok = far > 1500 && near < 200 && edge > 100;
 			return (ok ? "PASS" : "FAIL") + String.format(" solid blocks y150-250 just past the edge: %d, high up just inside: %d, cliff at the edge: %d/284", far, near, edge);
 		}
 	}

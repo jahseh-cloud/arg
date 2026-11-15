@@ -247,34 +247,49 @@ public final class ShotHarness {
 
 	/** A tour of the Far Lands from different spots. */
 	private static void farLandsGallery(ServerWorld world, net.spindle.world.Hivemind hive) {
-		gallery(world, "g01_the_edge", 990, 90, 220, 1070, 130, 220);
-		gallery(world, "g02_along_the_wall", 1000, 130, -120, 1030, 120, 120);
-		gallery(world, "g03_100_in", 1110, 150, 40, 1200, 120, 70);
-		gallery(world, "g04_the_corner", 985, 140, 985, 1090, 125, 1090);
-		gallery(world, "g05_300_in", 1320, 160, 0, 1420, 120, 40);
-		gallery(world, "g06_500_in", 1520, 170, 0, 1620, 120, 40);
-		gallery(world, "g07_800_in", 1830, 180, 0, 1930, 120, 40);
-		gallery(world, "g08_2000_in", 3030, 180, 0, 3130, 120, 40);
+		gallery(world, "g01_the_edge", 950, 130, 220, 1030, 130, 220, false);
+		gallery(world, "g02_along_the_wall", 995, 165, -150, 1024, 120, 150, false);
+		gallery(world, "g03_down_a_tunnel", 1100, 110, 40, 1260, -1, 40, true);
+		gallery(world, "g04_the_corner", 965, 160, 965, 1060, 130, 1060, false);
+		gallery(world, "g05_300_in_from_above", 1300, 252, 0, 1420, 140, 40, false);
+		gallery(world, "g06_500_in", 1520, 130, 0, 1620, -1, 60, true);
+		gallery(world, "g07_800_in", 1830, 140, 0, 1930, -1, 60, true);
+		gallery(world, "g08_2000_in", 3030, 150, 0, 3130, -1, 60, true);
 		net.spindle.world.FarLands fl = net.spindle.world.FarLands.of(net.spindle.world.Hivemind.seedFrom(world.getChunkManager().getNoiseConfig()));
 		net.spindle.world.FarLands.Oasis oasis = fl.firstOasisEast();
 		if (oasis != null) {
 			int r = oasis.radius();
-			gallery(world, "g09_oasis", oasis.x() - r - 30, 150, oasis.z() - 10, oasis.x() + 10, 75, oasis.z());
+			int gy = fl.oasisGround(oasis.x(), oasis.z(), world.getSeaLevel());
+			gallery(world, "g09_oasis", oasis.x() - r - 25, gy + 45, oasis.z() - 15, oasis.x() + 10, gy, oasis.z(), false);
 		}
 		if (hive != null) {
 			Vec3d c = Vec3d.ofCenter(hive.center);
-			gallery(world, "g10_near_the_hive", (int) c.x - 170, 150, (int) c.z, (int) c.x, (int) c.y + 20, (int) c.z);
+			gallery(world, "g10_near_the_hive", (int) c.x - 150, 235, (int) c.z - 40, (int) c.x, (int) c.y, (int) c.z, false);
 		}
 	}
 
-	/** Camera nudged up out of any rock, looking at a point. */
-	private static void gallery(ServerWorld world, String name, int x, int y, int z, int lx, int ly, int lz) {
+	/** Is there open air around here (not just a gap the camera would be wedged into)? */
+	private static boolean open(ServerWorld world, BlockPos p) {
+		for (int dx = -3; dx <= 3; dx += 3) for (int dy = -3; dy <= 3; dy += 3) for (int dz = -3; dz <= 3; dz += 3) {
+			if (!world.getBlockState(p.add(dx, dy, dz)).isAir()) return false;
+		}
+		return true;
+	}
+
+	/** Camera moved to the nearest open air, looking at a point (ly -1: straight ahead at camera height). */
+	private static void gallery(ServerWorld world, String name, int x, int y, int z, int lx, int ly, int lz, boolean level) {
 		Scenes.prepare(world, Math.min(x, lx) - 48, Math.min(z, lz) - 48, Math.max(x, lx) + 48, Math.max(z, lz) + 48);
-		BlockPos.Mutable p = new BlockPos.Mutable(x, y, z);
-		while (p.getY() < 310 && !(world.getBlockState(p).isAir() && world.getBlockState(p.up()).isAir() && world.getBlockState(p.down()).isAir())) p.move(0, 1, 0);
-		Vec3d cam = new Vec3d(x + 0.5, p.getY() + 0.5, z + 0.5);
-		Vec3d look = new Vec3d(lx, ly, lz);
-		SHOTS.add(new Shot(name, cam, () -> look, 160, () -> true));
+		BlockPos cam = null;
+		for (int i = 0; i <= 140 && cam == null; i++) {
+			int dy = (i % 2 == 0) ? i / 2 : -(i + 1) / 2;
+			BlockPos p = new BlockPos(x, y + dy, z);
+			if (p.getY() > 4 && p.getY() < 300 && open(world, p)) cam = p;
+		}
+		if (cam == null) cam = new BlockPos(x, 270, z);
+		Vec3d camera = Vec3d.ofCenter(cam);
+		Vec3d look = new Vec3d(lx, level ? camera.y : ly, lz);
+		log("gallery " + name + " camera " + cam.toShortString());
+		SHOTS.add(new Shot(name, camera, () -> look, 160, () -> true));
 	}
 
 	private static Vec3d v(BlockPos o, double x, double y, double z) {

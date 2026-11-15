@@ -130,29 +130,28 @@ public final class FarLands {
 
 		double d;
 		if (px > 0 && pz > 0) {
-			// Corner Far Lands: both axes overflow, everything turns into pillars.
-			double stretch = MathHelper.lerp(s, 220.0, 40.0);
-			d = 0.75 * cell(x / 4.0, z / 4.0, yy / stretch, 11)
-					+ 0.25 * cell(x / 2.0, z / 2.0, yy / 24.0, 12);
+			// Corner Far Lands: both axes overflow and everything turns into striped pillars.
+			double stretch = MathHelper.lerp(s, 260.0, 50.0);
+			d = cell(x / 6.0, z / 6.0, yy / stretch, 11) + 0.5 * cell(x / 3.0, z / 3.0, yy / 5.0, 12);
 		} else {
-			// Edge Far Lands: along u (away from the world) the terrain hardly changes.
+			// Edge Far Lands: along u (away from the world) the terrain hardly changes, so it runs in
+			// long straight tunnels and ledges; across the face it's wide flat strata.
 			int u = px > pz ? px : pz;
 			int v = px > pz ? z : x;
-			double tunnel = MathHelper.lerp(s, 420.0, 36.0);
-			double ystep = MathHelper.lerp(s * s, 8.0, 4.0);
-			double shear = s < 0.3 ? 0 : (s - 0.3) * 1.6 * Math.signum(wobble + 0.01);
+			double tunnel = MathHelper.lerp(s, 600.0, 60.0);
+			double shear = s < 0.3 ? 0 : (s - 0.3) * 1.4 * Math.signum(wobble + 0.01);
 			double vv = v + yy * shear;
-			d = 0.8 * cell(vv / 4.0, yy / ystep, u / tunnel, 21)
-					+ 0.2 * cell(vv / 16.0, yy / 32.0, u / (tunnel * 0.5), 22);
+			double chaos = MathHelper.lerp(s * s, 1.0, 0.45); // strata get shorter and choppier
+			d = cell(vv / (32.0 * chaos), yy / 5.0, u / tunnel, 21)
+					+ 0.5 * cell(vv / (16.0 * chaos), yy / 3.0, u / tunnel, 22)
+					+ 0.25 * cell(vv / 6.0, yy / 2.0, u / (tunnel * 0.5), 23);
 		}
 
-		// Solid low down, open high up. Deeper in, the ground matters less and terrain floats.
-		double grip = MathHelper.lerp(s, 1.0, 0.45);
-		d += (150.0 - yy) / 200.0 * grip;
+		// The ground hardly matters: the strata go all the way up. Deeper in, even less.
+		double grip = MathHelper.lerp(s, 1.0, 0.3);
+		d += (60.0 - yy) / 400.0 * grip;
 		d -= Math.max(0, y - 238) / 10.0; // thins out just under the top of the world
-		// The boundary is a cliff.
-		if (past < 20) d += (20 - past) / 20.0 * 0.7;
-		return d - 0.05;
+		return d + 0.07;
 	}
 
 	/** What a solid Far Lands block is made of. */
