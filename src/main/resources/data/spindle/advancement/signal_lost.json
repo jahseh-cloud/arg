@@ -1,0 +1,14 @@
+{
+	"parent": "spindle:parasite",
+	"display": {
+		"icon": {"id": "minecraft:echo_shard"},
+		"title": {"translate": "advancements.spindle.signal_lost.title"},
+		"description": {"translate": "advancements.spindle.signal_lost.description"},
+		"frame": "challenge",
+		"show_toast": true,
+		"announce_to_chat": true,
+		"hidden": true
+	},
+	"criteria": {"done": {"trigger": "minecraft:impossible"}},
+	"rewards": {"experience": 500}
+}

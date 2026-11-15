@@ -58,6 +58,32 @@ public final class SpindleDebug {
 							ctx.getSource().sendFeedback(() -> Text.literal("Calmed."), false);
 							return 1;
 						}))
+						.then(CommandManager.literal("hivemind").executes(ctx -> {
+							net.spindle.world.Hivemind hive = net.spindle.world.Hivemind.of(ctx.getSource().getServer().getOverworld());
+							if (hive == null) return 0;
+							net.minecraft.util.math.BlockPos c = hive.center;
+							var state = net.spindle.world.SpindleWorldState.get(ctx.getSource().getServer());
+							ctx.getSource().sendFeedback(() -> Text.literal("The Hivemind is centered at " + c.getX() + " " + c.getY() + " " + c.getZ()
+									+ (state.broodmotherSlain ? " (the Broodmother is dead)" : "")), false);
+							return 1;
+						}))
+						.then(CommandManager.literal("stalker").executes(ctx -> {
+							ServerPlayerEntity p = ctx.getSource().getPlayerOrThrow();
+							SpindleEntity s = net.spindle.world.StalkerDirector.spawnFor(p.getServerWorld(), p);
+							ctx.getSource().sendFeedback(() -> Text.literal(s == null ? "Nowhere hidden to put one." : "One is watching you now."), false);
+							return s == null ? 0 : 1;
+						}))
+						.then(CommandManager.literal("expose").executes(ctx -> {
+							int n = 0;
+							for (net.spindle.entity.BroodmotherEntity m : ctx.getSource().getWorld().getEntitiesByType(Spindle.BROODMOTHER, e -> true)) {
+								m.wake();
+								m.debugExpose();
+								n++;
+							}
+							int found = n;
+							ctx.getSource().sendFeedback(() -> Text.literal(found == 0 ? "No Broodmother loaded." : "Nodes destroyed."), false);
+							return n;
+						}))
 						.then(CommandManager.literal("tension")
 								.then(CommandManager.argument("percent", IntegerArgumentType.integer(0, 100)).executes(ctx -> {
 									SpindleEntity s = nearest(ctx.getSource(), ctx.getSource().getPlayerOrThrow());

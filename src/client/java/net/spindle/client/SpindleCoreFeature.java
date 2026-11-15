@@ -47,11 +47,11 @@ public class SpindleCoreFeature extends FeatureRenderer<SpindleEntity, SpindleMo
 	static float tear(SpindleEntity entity, float animationProgress) {
 		int slot = (int) (animationProgress / 2f);
 		float chance = switch (entity.getSyncedMode()) {
-			case HUNT -> 0.14f;
-			case STALK -> 0.05f;
-			default -> 0.08f;
+			case HUNT -> 0.045f;
+			case STALK -> 0.012f;
+			default -> 0.02f;
 		};
-		if (entity.hurtTime > 0) chance = 0.6f;
+		if (entity.hurtTime > 0) chance = 0.35f;
 		return noise(slot, entity.getId() * 31 + 7) < chance ? 0.5f + noise(slot, entity.getId() * 17) * 0.5f : 0f;
 	}
 
@@ -59,10 +59,10 @@ public class SpindleCoreFeature extends FeatureRenderer<SpindleEntity, SpindleMo
 	public void render(MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, SpindleEntity entity,
 					   float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
 		float g = MathHelper.lerp(tickDelta, entity.prevGlow, entity.glow);
-		float intensity = 0.55f + 0.45f * g;
+		float intensity = 0.35f + 0.4f * g;
 		float flicker = noise((int) animationProgress, entity.getId() * 3 + 1);
-		if (flicker < 0.07f) intensity *= 0.1f;          // drops out
-		else if (flicker > 0.95f) intensity = 1f;         // spikes
+		if (flicker < 0.05f) intensity *= 0.1f;          // drops out
+		else if (flicker > 0.98f) intensity = 0.9f;       // spikes
 		if (entity.isDead()) intensity *= 1f - Math.min(1f, entity.deathTime / 20f);
 		int c = MathHelper.clamp((int) (intensity * 255f), 0, 255);
 		int color = 0xFF000000 | (c << 16) | (c << 8) | c;
@@ -72,9 +72,9 @@ public class SpindleCoreFeature extends FeatureRenderer<SpindleEntity, SpindleMo
 		float tear = tear(entity, animationProgress);
 		if (tear > 0f) {
 			int slot = (int) (animationProgress / 2f);
-			float shift = (0.05f + 0.12f * tear) * (noise(slot, entity.getId() + 99) < 0.5f ? 1f : -1f);
+			float shift = (0.03f + 0.07f * tear) * (noise(slot, entity.getId() + 99) < 0.5f ? 1f : -1f);
 			float lift = (noise(slot, entity.getId() + 5) - 0.5f) * 0.06f;
-			int alpha = (int) (70 + 80 * tear);
+			int alpha = (int) (40 + 60 * tear);
 			ghost(matrices, vertexConsumers, shift, lift, (alpha << 24) | 0xFF1040);
 			ghost(matrices, vertexConsumers, -shift, -lift, (alpha << 24) | 0x10F0FF);
 		}

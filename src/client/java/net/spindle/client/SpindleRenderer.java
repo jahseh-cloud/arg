@@ -166,7 +166,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 	}
 
 	/** Places a model part at {@code at}, its +Z axis pointing along {@code dir}. */
-	private static void drawPart(Vec3d at, Vec3d dir, Vec3d base, MatrixStack matrices, VertexConsumer vc, ModelPart part,
+	static void drawPart(Vec3d at, Vec3d dir, Vec3d base, MatrixStack matrices, VertexConsumer vc, ModelPart part,
 								 int light, int overlay, float scale, float roll, int color) {
 		matrices.push();
 		matrices.translate(at.x - base.x, at.y - base.y, at.z - base.z);
@@ -193,7 +193,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 	}
 
 	/** Uniform Catmull-Rom spline through the control points, sampled roughly every {@code step} blocks. */
-	private static List<Vec3d> spline(List<Vec3d> c, double step) {
+	static List<Vec3d> spline(List<Vec3d> c, double step) {
 		List<Vec3d> out = new ArrayList<>();
 		int m = c.size();
 		if (m == 2) {
@@ -267,7 +267,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		}
 	}
 
-	private static void drawSegment(Vec3d a, Vec3d b, Vec3d base, MatrixStack matrices, VertexConsumer vc, ModelPart seg,
+	static void drawSegment(Vec3d a, Vec3d b, Vec3d base, MatrixStack matrices, VertexConsumer vc, ModelPart seg,
 									int light, int overlay, float thickness, int color) {
 		Vec3d d = b.subtract(a);
 		double len = d.length();
@@ -281,7 +281,7 @@ public class SpindleRenderer extends MobEntityRenderer<SpindleEntity, SpindleMod
 		matrices.pop();
 	}
 
-	private static int colorGray(float v) {
+	static int colorGray(float v) {
 		int c = MathHelper.clamp((int) (v * 255f), 0, 255);
 		return 0xFF000000 | (c << 16) | (c << 8) | c;
 	}

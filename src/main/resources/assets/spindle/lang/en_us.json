@@ -14,5 +14,12 @@
 	"subtitles.spindle.snap": "Something tears loose",
 	"subtitles.spindle.slam": "Heavy impact",
 	"subtitles.spindle.steal": "Something is taken",
-	"commands.spindle.none": "No Spindle within 256 blocks"
+	"commands.spindle.none": "No Spindle within 256 blocks",
+	"block.spindle.hivemass": "Hivemass",
+	"entity.spindle.broodmother": "Broodmother",
+	"entity.spindle.brood_node": "Brood Node",
+	"advancements.spindle.parasite.title": "παράσιτος",
+	"advancements.spindle.parasite.description": "Find the Hivemind",
+	"advancements.spindle.signal_lost.title": "Signal Lost",
+	"advancements.spindle.signal_lost.description": "Kill the Broodmother. They're gone."
 }

@@ -17,6 +17,9 @@ public class SpindleClient implements ClientModInitializer {
 	public void onInitializeClient() {
 		EntityModelLayerRegistry.registerModelLayer(LAYER, SpindleModel::getTexturedModelData);
 		EntityRendererRegistry.register(Spindle.SPINDLE, SpindleRenderer::new);
+		EntityModelLayerRegistry.registerModelLayer(BroodmotherRenderer.LAYER, BroodmotherRenderer::getTexturedModelData);
+		EntityRendererRegistry.register(Spindle.BROODMOTHER, BroodmotherRenderer::new);
+		EntityRendererRegistry.register(Spindle.BROOD_NODE, BroodNodeRenderer::new);
 		net.spindle.client.shots.ShotHarness.init();
 		ClientPlayNetworking.registerGlobalReceiver(SpindleNetworking.TendrilTrailPayload.ID, (payload, context) -> {
 			if (context.client().world == null) return;

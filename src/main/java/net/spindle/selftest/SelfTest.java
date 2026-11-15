@@ -36,6 +36,11 @@ public final class SelfTest {
 		return System.getenv("SPINDLE_SELFTEST") != null;
 	}
 
+	/** "world" runs the world-generation and story tests one after another; anything else runs the behaviour tests. */
+	public static boolean worldMode() {
+		return "world".equals(System.getenv("SPINDLE_SELFTEST"));
+	}
+
 	public static void init() {
 		if (!enabled()) return;
 		ServerTickEvents.END_SERVER_TICK.register(SelfTest::tick);
@@ -63,6 +68,16 @@ public final class SelfTest {
 
 	private static void setup(MinecraftServer server) {
 		ServerWorld world = server.getOverworld();
+		if (worldMode()) {
+			for (String c : new String[]{"gamerule doDaylightCycle false", "gamerule doWeatherCycle false", "gamerule doMobSpawning false",
+					"difficulty normal", "weather clear", "time set midnight"}) {
+				Scenes.cmd(server, c);
+			}
+			SCENARIOS.addAll(WorldTests.all());
+			server.getTickManager().startSprint(20000);
+			return;
+		}
+		net.spindle.world.StalkerDirector.enabled = false;
 		for (String c : new String[]{
 				"gamerule doMobSpawning false", "gamerule doDaylightCycle false", "gamerule doWeatherCycle false",
 				"gamerule spawnRadius 0", "difficulty normal", "weather clear", "time set midnight",
@@ -90,6 +105,7 @@ public final class SelfTest {
 			Scenes.prepare(world, ox - 64, oz - 64, ox + 96, oz + 64);
 			s.world = world;
 			s.o = new BlockPos(ox, Scenes.groundY(world, ox, oz), oz);
+			s.started = true;
 			s.setup();
 			log("START " + s.name + " at " + s.o.toShortString());
 		}
@@ -101,6 +117,13 @@ public final class SelfTest {
 		for (Scenario s : SCENARIOS) {
 			if (s.result != null) continue;
 			allDone = false;
+			if (!s.started) {
+				s.started = true;
+				s.world = server.getOverworld();
+				s.place();
+				log("START " + s.name + " at " + s.o.toShortString());
+				s.setup();
+			}
 			s.t++;
 			if (s.victim != null) s.victim.drive();
 			s.observe();
@@ -114,8 +137,9 @@ public final class SelfTest {
 			} else if (s.t % 100 == 0) {
 				log("TRACE " + s.name + " t=" + s.t + " " + s.status());
 			}
+			if (worldMode()) break; // one at a time
 		}
-		if (allDone || ticks > START_TICK + 2600) finish(server);
+		if (allDone || ticks > START_TICK + (worldMode() ? 12000 : 2600)) finish(server);
 	}
 
 	private static void finish(MinecraftServer server) {
@@ -146,6 +170,20 @@ public final class SelfTest {
 		TestPlayer victim;
 		int t;
 		String result;
+		boolean started;
+
+		/** Sets "o" (world tests pick their own spot; behaviour tests are placed by setup()). */
+		void place() {
+		}
+
+		final StringBuilder notesBuf = new StringBuilder();
+		String notes = "";
+
+		static void note(Scenario s, String text) {
+			if (s.notesBuf.length() > 0) s.notesBuf.append(", ");
+			s.notesBuf.append(text);
+			s.notes = s.notesBuf.toString();
+		}
 
 		// observations
 		final EnumSet<TendrilController.State> tendrilStates = EnumSet.noneOf(TendrilController.State.class);

@@ -16,7 +16,12 @@ import net.minecraft.registry.Registry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.spindle.entity.SpindleChunkLoader;
+import net.spindle.entity.BroodNodeEntity;
+import net.spindle.entity.BroodmotherEntity;
 import net.spindle.entity.SpindleEntity;
+import net.spindle.world.HiveEvents;
+import net.spindle.world.StalkerDirector;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.spindle.selftest.SelfTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +40,24 @@ public class Spindle implements ModInitializer {
 					.maxTrackingRange(16) // chunks; it needs to be visible from far away while stalking
 					.build("spindle"));
 
+	public static final EntityType<BroodmotherEntity> BROODMOTHER = Registry.register(
+			Registries.ENTITY_TYPE,
+			id("broodmother"),
+			EntityType.Builder.create(BroodmotherEntity::new, SpawnGroup.MONSTER)
+					.dimensions(9.0f, 8.0f)
+					.makeFireImmune()
+					.maxTrackingRange(16)
+					.build("broodmother"));
+
+	public static final EntityType<BroodNodeEntity> BROOD_NODE = Registry.register(
+			Registries.ENTITY_TYPE,
+			id("brood_node"),
+			EntityType.Builder.create(BroodNodeEntity::new, SpawnGroup.MONSTER)
+					.dimensions(1.4f, 1.4f)
+					.makeFireImmune()
+					.maxTrackingRange(10)
+					.build("brood_node"));
+
 	public static final Item SPINDLE_SPAWN_EGG = Registry.register(
 			Registries.ITEM,
 			id("spindle_spawn_egg"),
@@ -47,16 +70,25 @@ public class Spindle implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		SpindleSounds.init();
+		SpindleBlocks.init();
 		SpindleNetworking.init();
 		SpindleDebug.init();
 		FabricDefaultAttributeRegistry.register(SPINDLE, SpindleEntity.createSpindleAttributes());
+		FabricDefaultAttributeRegistry.register(BROODMOTHER, BroodmotherEntity.createAttributes());
+		FabricDefaultAttributeRegistry.register(BROOD_NODE, BroodNodeEntity.createAttributes());
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.SPAWN_EGGS).register(entries -> entries.add(SPINDLE_SPAWN_EGG));
+		ItemGroupEvents.modifyEntriesEvent(ItemGroups.NATURAL).register(entries -> entries.add(SpindleBlocks.HIVEMASS_ITEM));
 
 		// After a restart, reload wherever each Spindle was so it keeps going without anyone nearby.
 		ServerWorldEvents.LOAD.register((server, world) -> SpindleChunkLoader.get(world).wakeAll(world));
 		// A Spindle keeps its surroundings loaded from the moment it exists.
 		ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
-			if (entity instanceof SpindleEntity) SpindleChunkLoader.keepLoaded(world, entity.getChunkPos());
+			if (entity instanceof SpindleEntity s && !s.isHiveBound()) SpindleChunkLoader.keepLoaded(world, entity.getChunkPos());
+			HiveEvents.onEntityLoad(entity, world);
+		});
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			StalkerDirector.tick(server);
+			HiveEvents.tick(server);
 		});
 		// Breaking blocks is loud: a Spindle hunting you nearby hears it.
 		PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {

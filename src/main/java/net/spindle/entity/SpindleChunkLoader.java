@@ -44,6 +44,13 @@ public class SpindleChunkLoader extends PersistentState {
 		if (!pos.equals(old)) markDirty();
 	}
 
+	public void forgetAll() {
+		if (!spindles.isEmpty()) {
+			spindles.clear();
+			markDirty();
+		}
+	}
+
 	public void forget(UUID id) {
 		if (spindles.remove(id) != null) markDirty();
 	}

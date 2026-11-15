@@ -1,0 +1,13 @@
+{
+	"parent": "minecraft:adventure/root",
+	"display": {
+		"icon": {"id": "spindle:hivemass"},
+		"title": {"translate": "advancements.spindle.parasite.title"},
+		"description": {"translate": "advancements.spindle.parasite.description"},
+		"frame": "challenge",
+		"show_toast": true,
+		"announce_to_chat": true,
+		"hidden": true
+	},
+	"criteria": {"done": {"trigger": "minecraft:impossible"}}
+}

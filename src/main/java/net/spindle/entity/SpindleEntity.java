@@ -404,8 +404,36 @@ public class SpindleEntity extends HostileEntity {
 
 	/** Screenshot harness only: hold whatever pose it's put in (posture and tendril still update). */
 	public boolean posed;
+	/** Lives in the Hivemind: sleeps until someone comes near, never leaves, doesn't keep chunks loaded. */
+	private boolean hiveBound;
+
+	public void setHiveBound(boolean v) {
+		hiveBound = v;
+	}
+
+	public boolean isHiveBound() {
+		return hiveBound;
+	}
+
+	/** Dies with the Broodmother: falls apart into ink and static. No drops. */
+	public void collapse() {
+		if (!(getWorld() instanceof ServerWorld world) || isRemoved()) return;
+		world.spawnParticles(net.minecraft.particle.ParticleTypes.SQUID_INK, getX(), getY() + getBodyHeight() / 2, getZ(),
+				40, 1.2, getBodyHeight() / 2, 1.2, 0.05);
+		world.playSound(null, getX(), getY(), getZ(), SpindleSounds.DEATH, net.minecraft.sound.SoundCategory.HOSTILE, 2f, 0.3f);
+		tendril.forceRelease();
+		SpindleChunkLoader.get(world).forget(getUuid());
+		discard();
+	}
 
 	private void serverTick(ServerWorld world) {
+		if (hiveBound && this.age % 20 == 0) {
+			PlayerEntity near = world.getClosestPlayer(getX(), getY(), getZ(), 40,
+					e -> e instanceof PlayerEntity p && !p.isSpectator() && !p.isCreative());
+			boolean asleep = near == null && getTarget() == null && recentDamage <= 0;
+			if (asleep != isAiDisabled()) setAiDisabled(asleep);
+		}
+		if (hiveBound && isAiDisabled()) return;
 		if (posed) {
 			if (this.age % 20 == 0) SpindleChunkLoader.get(world).update(world, getUuid(), getChunkPos());
 			updatePosture();
@@ -415,7 +443,7 @@ public class SpindleEntity extends HostileEntity {
 		}
 		samplePlayers(world);
 		if (this.age % 2 == 0) updateWatchers(world);
-		if (this.age % 20 == 0 && isAlive()) SpindleChunkLoader.get(world).update(world, getUuid(), getChunkPos());
+		if (this.age % 20 == 0 && isAlive() && !hiveBound) SpindleChunkLoader.get(world).update(world, getUuid(), getChunkPos());
 		recentDamage = Math.max(0f, recentDamage - 0.05f);
 		if (attackCooldown > 0) attackCooldown--;
 		updateMode(world);
@@ -864,6 +892,7 @@ public class SpindleEntity extends HostileEntity {
 		boolean result = super.damage(source, amount);
 		if (result && !getWorld().isClient) {
 			recentDamage += amount;
+			if (isAiDisabled() && hiveBound) setAiDisabled(false);
 			if (isHanging()) setHanging(false);
 			if (frozen) gazeDamage += amount;
 			tendril.onOwnerDamaged(amount);
@@ -1334,6 +1363,7 @@ public class SpindleEntity extends HostileEntity {
 		nbt.putFloat("BodyHeight", getBodyHeight());
 		nbt.putBoolean("Hanging", isHanging());
 		if (posed) nbt.putBoolean("Posed", true);
+		if (hiveBound) nbt.putBoolean("HiveBound", true);
 		NbtList list = new NbtList();
 		for (StolenItem s : stolen) {
 			if (s.stack.isEmpty()) continue;
@@ -1363,6 +1393,7 @@ public class SpindleEntity extends HostileEntity {
 		}
 		if (nbt.getBoolean("Hanging")) setHanging(true);
 		posed = nbt.getBoolean("Posed");
+		hiveBound = nbt.getBoolean("HiveBound");
 		stolen.clear();
 		NbtList list = nbt.getList("Stolen", NbtElement.COMPOUND_TYPE);
 		for (int i = 0; i < list.size(); i++) {

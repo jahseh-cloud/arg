@@ -25,7 +25,7 @@ public class SpindleTravelGoal extends Goal {
 
 	@Override
 	public boolean canStart() {
-		if (spindle.getMode() != SpindleEntity.Mode.WANDER || spindle.getTarget() != null) return false;
+		if (spindle.isHiveBound() || spindle.getMode() != SpindleEntity.Mode.WANDER || spindle.getTarget() != null) return false;
 		if (--checkTimer > 0) return false;
 		checkTimer = 20; // (goal checks only run every other tick)
 		quarry = pickQuarry();

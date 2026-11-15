@@ -141,8 +141,17 @@ public final class ShotHarness {
 				"effect give @a minecraft:night_vision infinite 0 true"}) {
 			Scenes.cmd(server, c);
 		}
+		// The world the tests left behind has a dead Broodmother; bring everything back for the photos.
+		net.spindle.world.SpindleWorldState st = net.spindle.world.SpindleWorldState.get(server);
+		st.broodmotherSlain = false;
+		st.hivePopulated = false;
+		st.markDirty();
 		Scenes.prepare(world, -64, -64, 960, 64);
-		ground = Scenes.groundY(world, 0, 0);
+		// Old scenes are staged on platforms high in the sky so the real terrain doesn't get in the way.
+		ground = 190;
+		for (int px = -40; px <= 680; px += 100) {
+			Scenes.fill(world, new BlockPos(px, ground, 0), -30, -1, -30, 70, -1, 30, Blocks.GRASS_BLOCK.getDefaultState());
+		}
 		BlockState plank = Blocks.SPRUCE_PLANKS.getDefaultState();
 		BlockState dark = Blocks.DARK_OAK_PLANKS.getDefaultState();
 
@@ -202,8 +211,32 @@ public final class ShotHarness {
 		SpindleEntity stairs = posed(world, g.getX() + 12.5, ground + 4, 0.5, -90f);
 		SHOTS.add(new Shot("09_on_steps", v(g, 12.5, 4, -14), () -> stairs.getPos().add(0, 2.5, 0), 80, () -> true));
 
+		buildWorldShots(server, world);
 		built = true;
 		log("BUILT ground=" + ground);
+	}
+
+	/** The Far Lands and the Hivemind, in the real generated world. */
+	private static void buildWorldShots(MinecraftServer server, ServerWorld world) {
+		net.spindle.world.Hivemind hive = net.spindle.world.Hivemind.of(world);
+		Scenes.prepare(world, 980, -40, 1180, 40);
+		SHOTS.add(new Shot("10_farlands_edge", new Vec3d(985, 150, -30), () -> new Vec3d(1080, 120, 10), 60, () -> true));
+		SHOTS.add(new Shot("11_farlands_inside", new Vec3d(1100, 225, 0), () -> new Vec3d(1180, 140, 40), 60, () -> true));
+		if (hive == null) {
+			log("no hivemind in this world");
+			return;
+		}
+		Vec3d c = Vec3d.ofCenter(hive.center);
+		Scenes.prepare(world, hive.bounds.getMinX() - 60, hive.bounds.getMinZ() - 60, hive.bounds.getMaxX() + 60, hive.bounds.getMaxZ() + 60);
+		Vec3d out = hive.entrances.isEmpty() ? new Vec3d(1, 0, 0) : hive.entrances.get(0).subtract(c).normalize();
+		SHOTS.add(new Shot("12_hive_exterior", c.add(out.multiply(175)).add(0, 70, 0), () -> c, 80, () -> true));
+		net.spindle.world.HiveEvents.populate(world, hive, net.spindle.world.SpindleWorldState.get(server));
+		net.spindle.world.Hivemind.Sphere ch = hive.chambers.get(0);
+		SHOTS.add(new Shot("13_hive_chamber", ch.c().add(ch.r() * 0.6, 0, ch.r() * 0.3), () -> ch.c().add(0, -ch.r() * 0.4, 0), 80, () -> true));
+		Vec3d tc = hive.throne.c();
+		SHOTS.add(new Shot("14_broodmother", tc.add(22, 2, 10), () -> tc.add(0, -2, 0), 120, () -> true,
+				() -> world.getEntitiesByType(net.spindle.Spindle.BROODMOTHER, e -> true).forEach(m -> m.wake())));
+		SHOTS.add(new Shot("15_broodmother_below", tc.add(8, -11, -14), () -> tc.add(0, 0, 0), 60, () -> true));
 	}
 
 	private static Vec3d v(BlockPos o, double x, double y, double z) {
