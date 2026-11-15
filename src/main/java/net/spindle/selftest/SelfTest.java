@@ -89,6 +89,7 @@ public final class SelfTest {
 				for (var w : srv.getWorlds()) {
 					b.append("SHUTDOWNDUMP world ").append(w.getRegistryKey().getValue()).append(": loaded chunks ")
 							.append(w.getChunkManager().getLoadedChunkCount()).append(", forced ").append(w.getForcedChunks().size()).append("\n");
+					if (n == 0 && w.getChunkManager().getLoadedChunkCount() > 0) b.append("SHUTDOWNDUMP tickets ").append(ticketSummary(w)).append("\n");
 				}
 			}
 			for (var entry : Thread.getAllStackTraces().entrySet()) {
@@ -103,6 +104,38 @@ public final class SelfTest {
 			}
 			System.out.println(b);
 			System.out.flush();
+		}
+	}
+
+	/** Which kinds of chunk tickets are holding chunks (reflection: test-only). */
+	private static String ticketSummary(net.minecraft.server.world.ServerWorld w) {
+		try {
+			Object tm = null;
+			for (java.lang.reflect.Field f : net.minecraft.server.world.ServerChunkManager.class.getDeclaredFields()) {
+				if (net.minecraft.server.world.ChunkTicketManager.class.isAssignableFrom(f.getType())) {
+					f.setAccessible(true);
+					tm = f.get(w.getChunkManager());
+				}
+			}
+			if (tm == null) return "no ticket manager";
+			java.lang.reflect.Field tf = null;
+			for (java.lang.reflect.Field f : net.minecraft.server.world.ChunkTicketManager.class.getDeclaredFields()) {
+				if (f.getType().getName().contains("Long2ObjectOpenHashMap")) tf = f;
+			}
+			if (tf == null) return "no ticket map";
+			tf.setAccessible(true);
+			var map = (it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<?>) tf.get(tm);
+			java.util.Map<String, Integer> counts = new java.util.TreeMap<>();
+			for (Object set : map.values()) {
+				for (Object ticket : (Iterable<?>) set) {
+					String t = ticket.toString();
+					String key = t.replaceAll("[0-9-]+", "#");
+					counts.merge(key.length() > 60 ? key.substring(0, 60) : key, 1, Integer::sum);
+				}
+			}
+			return map.size() + " positions: " + counts;
+		} catch (Throwable e) {
+			return "failed: " + e;
 		}
 	}
 
