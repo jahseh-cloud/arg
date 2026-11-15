@@ -222,6 +222,7 @@ public final class ShotHarness {
 		Scenes.prepare(world, 980, -40, 1180, 40);
 		SHOTS.add(new Shot("10_farlands_edge", new Vec3d(985, 150, -30), () -> new Vec3d(1080, 120, 10), 200, () -> true));
 		SHOTS.add(new Shot("11_farlands_inside", new Vec3d(1100, 225, 0), () -> new Vec3d(1180, 140, 40), 60, () -> true));
+		farLandsGallery(world, hive);
 		if (hive == null) {
 			log("no hivemind in this world");
 			return;
@@ -242,6 +243,34 @@ public final class ShotHarness {
 		SHOTS.add(new Shot("14_broodmother", tc.add(22, 2, 10), () -> tc.add(0, -2, 0), 120, () -> true,
 				() -> world.getEntitiesByType(net.spindle.Spindle.BROODMOTHER, e -> true).forEach(m -> m.wake())));
 		SHOTS.add(new Shot("15_broodmother_below", tc.add(8, -11, -14), () -> tc.add(0, 0, 0), 60, () -> true));
+	}
+
+	/** A tour of the Far Lands from different spots. */
+	private static void farLandsGallery(ServerWorld world, net.spindle.world.Hivemind hive) {
+		gallery(world, "g01_wall_from_the_sea", 990, 66, 220, 1070, 120, 220);
+		gallery(world, "g02_along_the_wall", 1000, 120, -120, 1030, 115, 120);
+		gallery(world, "g03_over_the_top", 980, 262, 320, 1140, 160, 340);
+		gallery(world, "g04_canyon_floor", 1140, 75, 90, 1200, 100, 130);
+		gallery(world, "g05_the_corner", 985, 140, 985, 1090, 125, 1090);
+		gallery(world, "g06_west_wall", -990, 110, 40, -1080, 125, 10);
+		gallery(world, "g07_two_thousand_in", 2400, 140, 0, 2470, 110, 50);
+		gallery(world, "g08_north_wall_from_land", 30, 100, -990, 0, 130, -1060);
+		gallery(world, "g09_looking_back_home", 1070, 205, 520, 900, 80, 520);
+		if (hive != null) {
+			Vec3d c = Vec3d.ofCenter(hive.center);
+			Vec3d rim = c.add(70, 140, -60);
+			gallery(world, "g10_crater_from_above", (int) rim.x, (int) rim.y, (int) rim.z, (int) c.x, (int) c.y, (int) c.z);
+		}
+	}
+
+	/** Camera nudged up out of any rock, looking at a point. */
+	private static void gallery(ServerWorld world, String name, int x, int y, int z, int lx, int ly, int lz) {
+		Scenes.prepare(world, Math.min(x, lx) - 48, Math.min(z, lz) - 48, Math.max(x, lx) + 48, Math.max(z, lz) + 48);
+		BlockPos.Mutable p = new BlockPos.Mutable(x, y, z);
+		while (p.getY() < 310 && !(world.getBlockState(p).isAir() && world.getBlockState(p.up()).isAir() && world.getBlockState(p.down()).isAir())) p.move(0, 1, 0);
+		Vec3d cam = new Vec3d(x + 0.5, p.getY() + 0.5, z + 0.5);
+		Vec3d look = new Vec3d(lx, ly, lz);
+		SHOTS.add(new Shot(name, cam, () -> look, 160, () -> true));
 	}
 
 	private static Vec3d v(BlockPos o, double x, double y, double z) {
