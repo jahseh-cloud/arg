@@ -134,6 +134,9 @@ public final class SelfTest {
 				}
 			}
 			StringBuilder out = new StringBuilder(map.size() + " positions: " + counts);
+			out.append(" | delay: manager=").append(call(w.getChunkManager().chunkLoadingManager, "shouldDelayShutdown"))
+					.append(" tickets=").append(call(tm, "shouldDelayShutdown"))
+					.append(" poi=").append(call(w.getPointOfInterestStorage(), "hasUnsavedElements"));
 			for (var e : map.long2ObjectEntrySet()) out.append(" @").append(new net.minecraft.util.math.ChunkPos(e.getLongKey())).append("=").append(e.getValue());
 			// Players are tracked separately from tickets.
 			for (java.lang.reflect.Field f : net.minecraft.server.world.ChunkTicketManager.class.getDeclaredFields()) {
@@ -171,6 +174,21 @@ public final class SelfTest {
 		} catch (Throwable e) {
 			return "failed: " + e;
 		}
+	}
+
+	private static String call(Object o, String name) {
+		for (Class<?> c = o.getClass(); c != null; c = c.getSuperclass()) {
+			try {
+				var m = c.getDeclaredMethod(name);
+				m.setAccessible(true);
+				return String.valueOf(m.invoke(o));
+			} catch (NoSuchMethodException e) {
+				// keep looking up
+			} catch (Throwable e) {
+				return "err " + e;
+			}
+		}
+		return "?";
 	}
 
 	private static void log(String line) {
