@@ -579,8 +579,8 @@ public class SpindleEntity extends HostileEntity {
 			if (player.isSpectator() || !player.isAlive()) continue;
 			double d2 = player.squaredDistanceTo(spot);
 			if (d2 > 100 * 100) continue;
-			// A black shape in the dark: hard to make out past a dozen blocks, impossible past a few dozen.
-			if (dark && d2 > (light <= 2 ? 10 * 10 : 24 * 24)) continue;
+			// A black shape in the dark: hard to make out past 16 blocks in pitch black, 28 in dim light.
+			if (dark && d2 > (light <= 2 ? 16 * 16 : 28 * 28)) continue;
 			Vec3d eye = player.getEyePos();
 			if (hasLineOfSight(eye, low) || hasLineOfSight(eye, high)) return true;
 		}
