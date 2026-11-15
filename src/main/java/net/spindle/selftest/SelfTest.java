@@ -54,11 +54,14 @@ public final class SelfTest {
 		int lastTicks = -1;
 		while (true) {
 			try {
-				Thread.sleep(45000);
+				Thread.sleep(finished ? 1000 : 45000);
 			} catch (InterruptedException e) {
 				return;
 			}
-			if (finished) return;
+			if (finished) {
+				shutdownDumps();
+				return;
+			}
 			StringBuilder b = new StringBuilder("WATCHDOG ticks=" + ticks + (ticks == lastTicks ? " (STUCK)" : "") + "\n");
 			lastTicks = ticks;
 			for (var entry : Thread.getAllStackTraces().entrySet()) {
@@ -69,6 +72,30 @@ public final class SelfTest {
 				for (int i = 0; i < Math.min(14, st.length); i++) b.append("    at ").append(st[i]).append("\n");
 			}
 			Spindle.LOGGER.info(b.toString());
+		}
+	}
+
+	/** After the tests: if the server is still around, show what every thread is doing. */
+	private static void shutdownDumps() {
+		for (int n = 0; n < 6; n++) {
+			try {
+				Thread.sleep(20000);
+			} catch (InterruptedException e) {
+				return;
+			}
+			StringBuilder b = new StringBuilder("SHUTDOWNDUMP " + n + "\n");
+			for (var entry : Thread.getAllStackTraces().entrySet()) {
+				Thread t = entry.getKey();
+				StackTraceElement[] st = entry.getValue();
+				if (st.length == 0 || t == Thread.currentThread()) continue;
+				String top = st[0].toString();
+				if (t.isDaemon() && (top.contains("Unsafe.park") || top.contains("Object.wait") || top.contains("Thread.sleep"))
+						&& !t.getName().startsWith("Server") && !t.getName().startsWith("Worker")) continue;
+				b.append("SHUTDOWNDUMP thread ").append(t.getName()).append(" ").append(t.getState()).append(t.isDaemon() ? " daemon" : "").append("\n");
+				for (int i = 0; i < Math.min(22, st.length); i++) b.append("SHUTDOWNDUMP    at ").append(st[i]).append("\n");
+			}
+			System.out.println(b);
+			System.out.flush();
 		}
 	}
 
