@@ -258,7 +258,7 @@ public final class SelfTest {
 				Scenes.cmd(server, c);
 			}
 			SCENARIOS.addAll(WorldTests.all());
-			server.getTickManager().startSprint(20000);
+			// No tick sprint here: a sprint going on during shutdown left chunks loaded for minutes.
 			return;
 		}
 		net.spindle.world.StalkerDirector.enabled = false;
