@@ -252,9 +252,9 @@ public final class ShotHarness {
 		gallery(world, "g03_down_a_tunnel", 1100, 110, 40, 1260, -1, 40, true);
 		gallery(world, "g04_the_corner", 965, 160, 965, 1060, 130, 1060, false);
 		gallery(world, "g05_300_in", 1320, 120, 0, 1420, -1, 30, true);
-		gallery(world, "g06_500_in", 1520, 130, 0, 1620, -1, 60, true);
-		gallery(world, "g07_800_in", 1830, 140, 0, 1930, -1, 60, true);
-		gallery(world, "g08_2000_in", 3030, 150, 0, 3130, -1, 60, true);
+		gallery(world, "g06_500_in", 1500, 200, 0, 1600, 110, 50, false);
+		gallery(world, "g07_800_in", 1810, 190, 0, 1910, 100, 50, false);
+		gallery(world, "g08_2000_in", 3010, 190, 0, 3110, 100, 50, false);
 		net.spindle.world.FarLands fl = net.spindle.world.FarLands.of(net.spindle.world.Hivemind.seedFrom(world.getChunkManager().getNoiseConfig()));
 		net.spindle.world.FarLands.Oasis oasis = fl.firstOasisEast();
 		if (oasis != null) {
@@ -264,7 +264,7 @@ public final class ShotHarness {
 		}
 		if (hive != null) {
 			Vec3d c = Vec3d.ofCenter(hive.center);
-			gallery(world, "g10_near_the_hive", (int) c.x - 120, (int) c.y + 120, (int) c.z - 30, (int) c.x, (int) c.y, (int) c.z, false);
+			gallery(world, "g10_near_the_hive", (int) c.x - 190, 262, (int) c.z - 50, (int) c.x, (int) c.y + 10, (int) c.z, false);
 		}
 	}
 

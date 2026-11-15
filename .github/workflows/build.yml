@@ -24,12 +24,13 @@ jobs:
           msg=$(grep -E "error:|\.java:[0-9]+|FAILURE|What went wrong|Could not" -A2 build.log | grep -v "^\s*at " | head -150 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::error title=Build failed::${msg}"
       - name: behaviour tests
-        if: ${{ !contains(github.event.head_commit.message, '[quick]') }}
+        if: ${{ !contains(github.event.head_commit.message, '[quick]') && !contains(github.event.head_commit.message, '[shots]') }}
         shell: bash
         run: |
           set -o pipefail
           ./ci/selftest.sh behavior 2>&1 | tee -a selftest-out.log
       - name: world tests
+        if: ${{ !contains(github.event.head_commit.message, '[shots]') }}
         shell: bash
         run: |
           set -o pipefail
