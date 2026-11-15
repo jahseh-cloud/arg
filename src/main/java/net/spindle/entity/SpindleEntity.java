@@ -816,6 +816,11 @@ public class SpindleEntity extends HostileEntity {
 		int group = countPlayersNear(target, 16);
 		boolean alone = countPlayersNear(target, 24) <= 1;
 
+		if (hiveBound && (mode == Mode.WANDER || mode == Mode.STALK) && dist < 48) {
+			// In the nest they don't stalk. They swarm.
+			startHunt();
+			return;
+		}
 		switch (mode) {
 			case WANDER -> {
 				mode = Mode.STALK;

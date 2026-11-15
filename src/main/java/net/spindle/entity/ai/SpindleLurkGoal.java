@@ -46,7 +46,7 @@ public class SpindleLurkGoal extends Goal {
 		}
 		if (--cooldown > 0) return false;
 		cooldown = 40;
-		if (spindle.getMode() != SpindleEntity.Mode.STALK || target == null) return false;
+		if (spindle.isHiveBound() || spindle.getMode() != SpindleEntity.Mode.STALK || target == null) return false;
 		if (spindle.getTensionFraction() < 0.3f || spindle.isNoticed()) return false;
 		if (spindle.getWorld().isSkyVisible(target.getBlockPos())) return false; // underground / indoors only
 		if (spindle.distanceTo(target) > 40) return false;
