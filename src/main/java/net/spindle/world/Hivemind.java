@@ -173,20 +173,44 @@ public final class Hivemind {
 
 	/** Signed distance to the outside of the blob (negative inside). */
 	public double outerDistance(Vec3d p) {
+		return rawDistance(p) + skin(p);
+	}
+
+	/** Distance to the lobes, before the lumpy skin (which moves it by at most 9). */
+	private double rawDistance(Vec3d p) {
 		double d = Double.MAX_VALUE;
 		for (Sphere s : lobes) d = Math.min(d, p.distanceTo(s.c) - s.r);
-		return d + 7.0 * skin.sample(p.x / 24.0, p.y / 24.0, p.z / 24.0) + 2.0 * skin.sample(p.x / 6.0, p.y / 6.0, p.z / 6.0);
+		return d;
+	}
+
+	private double skin(Vec3d p) {
+		return 7.0 * skin.sample(p.x / 24.0, p.y / 24.0, p.z / 24.0) + 2.0 * skin.sample(p.x / 6.0, p.y / 6.0, p.z / 6.0);
 	}
 
 	/** Is this point hollow (a chamber, the heart or a tunnel)? */
 	public boolean isCarved(Vec3d p) {
-		if (inChamber(p, throne, 0.45)) return true;
-		for (Sphere s : chambers) if (inChamber(p, s, 0.55)) return true;
-		double w = 0.7 * wobble.sample(p.x / 9.0, p.y / 9.0, p.z / 9.0);
+		double n = Double.NaN; // the chambers' wobble, sampled only if a chamber is close
+		if (p.y >= throne.c.y - throne.r * 0.45 && p.squaredDistanceTo(throne.c) < sq(throne.r + 1.6)) {
+			n = 1.5 * wobble.sample(p.x / 7.0, p.y / 7.0, p.z / 7.0);
+			if (p.distanceTo(throne.c) < throne.r + n) return true;
+		}
+		for (Sphere s : chambers) {
+			if (p.y < s.c.y - s.r * 0.55 || p.squaredDistanceTo(s.c) >= sq(s.r + 1.6)) continue;
+			if (Double.isNaN(n)) n = 1.5 * wobble.sample(p.x / 7.0, p.y / 7.0, p.z / 7.0);
+			if (p.distanceTo(s.c) < s.r + n) return true;
+		}
+		double w = Double.NaN;
 		for (Tunnel t : tunnels) {
-			if (distToSegment(p, t.a, t.b) < t.r + w) return true;
+			double dt = distToSegment(p, t.a, t.b);
+			if (dt >= t.r + 0.8) continue;
+			if (Double.isNaN(w)) w = 0.7 * wobble.sample(p.x / 9.0, p.y / 9.0, p.z / 9.0);
+			if (dt < t.r + w) return true;
 		}
 		return false;
+	}
+
+	private static double sq(double v) {
+		return v * v;
 	}
 
 	/** A sphere with a flattened floor. */
@@ -208,11 +232,14 @@ public final class Hivemind {
 		if (!bounds.contains(x, y, z)) return null;
 		Vec3d p = new Vec3d(x + 0.5, y + 0.5, z + 0.5);
 		if (isCarved(p)) return net.minecraft.block.Blocks.AIR.getDefaultState();
-		double d = outerDistance(p);
+		double raw = rawDistance(p);
+		double halo = HALO + Math.max(0, y - center.getY()) * 0.55;
+		if (raw - 9.5 > halo) return null; // well outside, whatever the skin does
+		if (raw + 9.5 < 0) return SpindleBlocks.HIVEMASS.getDefaultState(); // deep inside
+		double d = raw + skin(p);
 		if (d < 0) return SpindleBlocks.HIVEMASS.getDefaultState();
 		// The Far Lands keep their distance: a hollow around the blob, open to the sky, with a floor.
 		// Widens upwards into a crater, so it can be spotted from the tops of the Far Lands.
-		double halo = HALO + Math.max(0, y - center.getY()) * 0.55;
 		if (d < halo && y > center.getY() - 34) return net.minecraft.block.Blocks.AIR.getDefaultState();
 		return null;
 	}

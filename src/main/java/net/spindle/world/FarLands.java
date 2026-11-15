@@ -126,47 +126,64 @@ public final class FarLands {
 
 	// ---------------------------------------------------------------- terrain
 
-	/** Positive = solid. */
-	public double density(int x, int y, int z) {
-		int px = Math.abs(x) - EDGE, pz = Math.abs(z) - EDGE;
-		int past = Math.max(px, pz);
-		double s = MathHelper.clamp(past / STRANGE_DEPTH, 0, 1);
-		double wobble = region.sample(x / 160.0, z / 160.0); // -1..1, slow
+	/** Everything about a column that doesn't change with height. */
+	private final class Column {
+		final int x, z, u, v;
+		final boolean corner;
+		final double s, wobble, sky, tunnel, shear, chaos, ys, grip, tear, stretch;
+		final boolean flipped;
 
-		// Upside-down sections deep in: terrain hanging from the sky.
-		double yy = y;
-		if (s > 0.55 && wobble > 0.55 - (s - 0.55) * 0.6) yy = 250 - y;
-
-		double d;
-		if (px > 0 && pz > 0) {
-			// Corner Far Lands: both axes overflow and everything turns into striped pillars.
-			double stretch = MathHelper.lerp(s, 260.0, 50.0);
-			d = cell(x / 6.0, z / 6.0, yy / stretch, 11) + 0.5 * cell(x / 3.0, z / 3.0, yy / 5.0, 12);
-		} else {
-			// Edge Far Lands: along u (away from the world) the terrain hardly changes, so it runs in
-			// long straight tunnels and ledges; across the face it's wide flat strata.
-			int u = px > pz ? px : pz;
-			int v = px > pz ? z : x;
-			double tunnel = MathHelper.lerp(s, 600.0, 60.0);
-			double shear = s < 0.3 ? 0 : (s - 0.3) * 1.4 * Math.signum(wobble + 0.01);
+		Column(int x, int z) {
+			this.x = x;
+			this.z = z;
+			int px = Math.abs(x) - EDGE, pz = Math.abs(z) - EDGE;
+			int past = Math.max(px, pz);
+			s = MathHelper.clamp(past / STRANGE_DEPTH, 0, 1);
+			wobble = region.sample(x / 160.0, z / 160.0); // -1..1, slow
+			// Upside-down sections deep in: terrain hanging from the sky.
+			flipped = s > 0.55 && wobble > 0.55 - (s - 0.55) * 0.6;
+			corner = px > 0 && pz > 0;
+			u = px > pz ? px : pz;
+			v = px > pz ? z : x;
+			stretch = MathHelper.lerp(s, 260.0, 50.0);
+			tunnel = MathHelper.lerp(s, 600.0, 60.0);
+			shear = s < 0.3 ? 0 : (s - 0.3) * 1.4 * Math.signum(wobble + 0.01);
 			// Deep in, the world tears: blocky columns slipped up and down against each other.
-			if (s > 0.45) yy += lattice(Math.floorDiv(v, 8), 7, Math.floorDiv(u, 16), 24) * 60.0 * (s - 0.45);
-			double vv = v + yy * shear;
-			double chaos = MathHelper.lerp(s * s, 1.0, 0.45); // strata get shorter and choppier
-			double ys = 9.0 - 4.0 * s; // strata get thinner deeper in
-			d = cell(vv / (32.0 * chaos), yy / ys, u / tunnel, 21)
-					+ 0.5 * cell(vv / (16.0 * chaos), yy / (ys * 0.6), u / tunnel, 22)
-					+ 0.25 * cell(vv / 6.0, yy / 2.5, u / (tunnel * 0.5), 23);
+			tear = s > 0.45 ? lattice(Math.floorDiv(v, 8), 7, Math.floorDiv(u, 16), 24) * 60.0 * (s - 0.45) : 0;
+			chaos = MathHelper.lerp(s * s, 1.0, 0.45); // strata get shorter and choppier
+			ys = 9.0 - 4.0 * s; // strata get thinner deeper in
+			grip = MathHelper.lerp(s, 1.0, 0.3);
+			// An uneven skyline: towers in places, broken-off lower tops in others, lower deeper in.
+			sky = 236 - 70 * (region.sample(x / 90.0 + 31.7, z / 90.0 - 12.3) * 0.5 + 0.5) * (0.4 + 0.6 * s);
 		}
 
-		// The ground hardly matters: the strata go all the way up. Deeper in, even less.
-		double grip = MathHelper.lerp(s, 1.0, 0.3);
-		d += (60.0 - yy) / 400.0 * grip;
-		// An uneven skyline: towers in places, broken-off lower tops in others, lower deeper in.
-		double sky = 236 - 70 * (region.sample(x / 90.0 + 31.7, z / 90.0 - 12.3) * 0.5 + 0.5) * (0.4 + 0.6 * s);
-		d -= Math.max(0, y - sky) / 14.0;
-		d -= Math.max(0, y - 238) / 10.0;
-		return d + 0.16;
+		/** Positive = solid. */
+		double density(int y) {
+			double yy = flipped ? 250 - y : y;
+			double d;
+			if (corner) {
+				// Corner Far Lands: both axes overflow and everything turns into striped pillars.
+				d = cell(x / 6.0, z / 6.0, yy / stretch, 11) + 0.5 * cell(x / 3.0, z / 3.0, yy / 5.0, 12);
+			} else {
+				// Edge Far Lands: along u (away from the world) the terrain hardly changes, so it runs in
+				// long straight tunnels and ledges; across the face it's wide flat strata.
+				yy += tear;
+				double vv = v + yy * shear;
+				d = cell(vv / (32.0 * chaos), yy / ys, u / tunnel, 21)
+						+ 0.5 * cell(vv / (16.0 * chaos), yy / (ys * 0.6), u / tunnel, 22)
+						+ 0.25 * cell(vv / 6.0, yy / 2.5, u / (tunnel * 0.5), 23);
+			}
+			// The ground hardly matters: the strata go all the way up. Deeper in, even less.
+			d += (60.0 - yy) / 400.0 * grip;
+			d -= Math.max(0, y - sky) / 14.0;
+			d -= Math.max(0, y - 238) / 10.0;
+			return d + 0.16;
+		}
+	}
+
+	/** Positive = solid. */
+	public double density(int x, int y, int z) {
+		return new Column(x, z).density(y);
 	}
 
 	/** What a solid Far Lands block is made of. */
@@ -268,12 +285,21 @@ public final class FarLands {
 				double od = o == null ? 1e9 : o.dist(x, z);
 				int ground = o == null ? 0 : oasisGround(x, z, seaLevel);
 				if (o != null) anyOasis = true;
+				// Sampled every other block and blended, like the Beta noise was.
+				Column col = o != null && od < o.radius() ? null : new Column(x, z);
+				double below = col == null ? 0 : col.density(bottom), above = below;
+				int sampled = bottom;
 				for (int y = bottom; y <= top; y++) {
+					if (col != null && ((y - bottom) & 1) == 0) {
+						below = y == sampled ? below : above;
+						sampled = y;
+						above = col.density(Math.min(y + 2, top + 2));
+					}
 					BlockState state;
 					if (o != null && od < o.radius()) {
 						state = y <= ground ? stone : air; // the world as it should be
 					} else {
-						double d = density(x, y, z);
+						double d = MathHelper.lerp((y - sampled) / 2.0, below, above);
 						if (o != null) {
 							// The ring around an oasis: the walls slope down into the valley.
 							double t = 1 - (od - o.radius()) / Oasis.RING;
