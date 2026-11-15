@@ -21,7 +21,7 @@ import java.util.List;
 /** World generation and story tests. Run on a normal (not flat) world, one after another. */
 final class WorldTests {
 	static List<SelfTest.Scenario> all() {
-		return List.of(new FarLandsTest(), new StalkerSpawnTest(), new HiveGenTest(), new HiveEnterTest(), new BroodmotherTest(),
+		return List.of(new FarLandsTest(), new OasisTest(), new StalkerSpawnTest(), new HiveGenTest(), new HiveEnterTest(), new BroodmotherTest(),
 				new AfterTheEndTest());
 	}
 
@@ -63,6 +63,51 @@ final class WorldTests {
 			int edge = countSolid(world, 1025, 8, 2, 70, 140);
 			boolean ok = far > 3000 && near < 200 && edge > 100;
 			return (ok ? "PASS" : "FAIL") + String.format(" solid blocks y150-250 just past the edge: %d, high up just inside: %d, cliff at the edge: %d/284", far, near, edge);
+		}
+	}
+
+	/** An oasis: flat plains in the middle of the Far Lands, and a village turns up when someone comes. */
+	static class OasisTest extends SelfTest.Scenario {
+		net.spindle.world.FarLands.Oasis oasis;
+		String terrain = "";
+
+		OasisTest() {
+			super("oasis", 900);
+		}
+
+		@Override
+		void place() {
+			oasis = net.spindle.world.FarLands.of(net.spindle.world.Hivemind.seedFrom(world.getChunkManager().getNoiseConfig())).firstOasisEast();
+			o = oasis == null ? new BlockPos(1500, 0, 0) : new BlockPos(oasis.x(), 0, oasis.z());
+		}
+
+		@Override
+		void setup() {
+			if (oasis == null) return;
+			int r = oasis.radius() + 16;
+			Scenes.prepare(world, o.getX() - r, o.getZ() - r, o.getX() + r, o.getZ() + r);
+			int gy = Scenes.groundY(world, o.getX(), o.getZ());
+			int min = 999, max = -999;
+			for (int i = 0; i < 16; i++) {
+				double a = i * Math.PI / 8;
+				int x = o.getX() + (int) (Math.cos(a) * oasis.radius() * 0.6), z = o.getZ() + (int) (Math.sin(a) * oasis.radius() * 0.6);
+				int y = Scenes.groundY(world, x, z);
+				min = Math.min(min, y);
+				max = Math.max(max, y);
+			}
+			var biome = world.getBiome(new BlockPos(o.getX(), gy, o.getZ())).getKey().map(k -> k.getValue().getPath()).orElse("?");
+			terrain = String.format("oasis at %d %d r%d, ground %d..%d, biome %s", oasis.x(), oasis.z(), oasis.radius(), min, max, biome);
+			victim = TestPlayer.spawn(world, "t_oasis", Vec3d.ofBottomCenter(new BlockPos(o.getX(), gy, o.getZ())), 0f);
+		}
+
+		@Override
+		String check() {
+			if (oasis == null) return "FAIL no oasis found";
+			int villagers = world.getEntitiesByType(net.minecraft.entity.EntityType.VILLAGER,
+					new net.minecraft.util.math.Box(o).expand(oasis.radius() + 60, 300, oasis.radius() + 60), e -> true).size();
+			if (villagers == 0 && t < 800) return null;
+			boolean flat = terrain.contains("biome plains");
+			return (villagers > 0 && flat ? "PASS " : "FAIL ") + terrain + ", villagers: " + villagers + " (" + net.spindle.world.HiveEvents.lastNote + ")";
 		}
 	}
 

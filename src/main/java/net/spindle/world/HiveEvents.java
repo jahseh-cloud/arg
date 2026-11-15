@@ -29,8 +29,10 @@ public final class HiveEvents {
 		if (hive == null) return;
 		SpindleWorldState state = SpindleWorldState.get(server);
 		Vec3d c = Vec3d.ofCenter(hive.center);
+		FarLands fl = FarLands.of(Hivemind.seedFrom(world.getChunkManager().getNoiseConfig()));
 		for (ServerPlayerEntity p : world.getPlayers()) {
 			if (p.isSpectator()) continue;
+			settleOasis(world, fl, state, p.getBlockX(), p.getBlockZ());
 			double d = p.getPos().distanceTo(c);
 			if (d < 150 && !state.hivePopulated && !state.broodmotherSlain) populate(world, hive, state);
 			if (hive.isInside(p.getPos())) {
@@ -38,6 +40,27 @@ public final class HiveEvents {
 				grant(p, ADV_PARASITE);
 			}
 		}
+	}
+
+	/** When someone first comes near an oasis, its village is put in. */
+	public static void settleOasis(ServerWorld world, FarLands fl, SpindleWorldState state, int x, int z) {
+		if (!FarLands.isFarLands(x, z)) return;
+		FarLands.Oasis o = fl.oasisNear(x, z);
+		if (o == null) return;
+		long key = BlockPos.asLong(o.x(), 0, o.z());
+		if (state.villages.contains(key)) return;
+		int ccx = o.x() >> 4, ccz = o.z() >> 4;
+		for (int dx = -4; dx <= 4; dx++) for (int dz = -4; dz <= 4; dz++) {
+			if (!world.isChunkLoaded(ccx + dx, ccz + dz)) return;
+		}
+		state.villages.add(key);
+		state.markDirty();
+		int y = fl.oasisGround(o.x(), o.z(), world.getSeaLevel()) + 1;
+		var server = world.getServer();
+		server.getCommandManager().executeWithPrefix(server.getCommandSource().withLevel(4).withSilent().withWorld(world),
+				"place structure minecraft:village_plains " + o.x() + " " + y + " " + o.z());
+		lastNote = "village at " + o.x() + " " + y + " " + o.z();
+		Spindle.LOGGER.info("Settled the oasis at {} {}", o.x(), o.z());
 	}
 
 	public static void grant(ServerPlayerEntity player, Identifier id) {

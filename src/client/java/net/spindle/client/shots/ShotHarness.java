@@ -247,19 +247,23 @@ public final class ShotHarness {
 
 	/** A tour of the Far Lands from different spots. */
 	private static void farLandsGallery(ServerWorld world, net.spindle.world.Hivemind hive) {
-		gallery(world, "g01_wall_from_the_sea", 990, 66, 220, 1070, 120, 220);
-		gallery(world, "g02_along_the_wall", 1000, 120, -120, 1030, 115, 120);
-		gallery(world, "g03_over_the_top", 980, 262, 320, 1140, 160, 340);
-		gallery(world, "g04_canyon_floor", 1140, 75, 90, 1200, 100, 130);
-		gallery(world, "g05_the_corner", 985, 140, 985, 1090, 125, 1090);
-		gallery(world, "g06_west_wall", -990, 110, 40, -1080, 125, 10);
-		gallery(world, "g07_two_thousand_in", 2400, 140, 0, 2470, 110, 50);
-		gallery(world, "g08_north_wall_from_land", 30, 100, -990, 0, 130, -1060);
-		gallery(world, "g09_looking_back_home", 1070, 205, 520, 900, 80, 520);
+		gallery(world, "g01_the_edge", 990, 90, 220, 1070, 130, 220);
+		gallery(world, "g02_along_the_wall", 1000, 130, -120, 1030, 120, 120);
+		gallery(world, "g03_100_in", 1110, 150, 40, 1200, 120, 70);
+		gallery(world, "g04_the_corner", 985, 140, 985, 1090, 125, 1090);
+		gallery(world, "g05_300_in", 1320, 160, 0, 1420, 120, 40);
+		gallery(world, "g06_500_in", 1520, 170, 0, 1620, 120, 40);
+		gallery(world, "g07_800_in", 1830, 180, 0, 1930, 120, 40);
+		gallery(world, "g08_2000_in", 3030, 180, 0, 3130, 120, 40);
+		net.spindle.world.FarLands fl = net.spindle.world.FarLands.of(net.spindle.world.Hivemind.seedFrom(world.getChunkManager().getNoiseConfig()));
+		net.spindle.world.FarLands.Oasis oasis = fl.firstOasisEast();
+		if (oasis != null) {
+			int r = oasis.radius();
+			gallery(world, "g09_oasis", oasis.x() - r - 30, 150, oasis.z() - 10, oasis.x() + 10, 75, oasis.z());
+		}
 		if (hive != null) {
 			Vec3d c = Vec3d.ofCenter(hive.center);
-			Vec3d rim = c.add(70, 140, -60);
-			gallery(world, "g10_crater_from_above", (int) rim.x, (int) rim.y, (int) rim.z, (int) c.x, (int) c.y, (int) c.z);
+			gallery(world, "g10_near_the_hive", (int) c.x - 170, 150, (int) c.z, (int) c.x, (int) c.y + 20, (int) c.z);
 		}
 	}
 
