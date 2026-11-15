@@ -28,6 +28,8 @@ public final class StalkerDirector {
 	public static int extraDelay = 3600;
 	public static boolean enabled = true;
 	private static final Map<UUID, Integer> NEXT = new HashMap<>();
+	/** Why the last attempts failed, for the self-test. */
+	public static String lastNote = "never ticked";
 
 	public static void tick(MinecraftServer server) {
 		if (!enabled || server.getTicks() % 40 != 0) return;
@@ -51,7 +53,10 @@ public final class StalkerDirector {
 				NEXT.put(player.getUuid(), now + minDelay + world.getRandom().nextInt(extraDelay + 1));
 				continue;
 			}
-			if (now < due) continue;
+			if (now < due) {
+				lastNote = "waiting " + (due - now);
+				continue;
+			}
 			boolean dark = !world.isSkyVisible(player.getBlockPos()) || world.isNight();
 			if (!dark && world.getRandom().nextFloat() < 0.7f) continue; // prefers night and caves
 			if (spawnFor(world, player) != null) NEXT.remove(player.getUuid());
@@ -73,16 +78,19 @@ public final class StalkerDirector {
 		if (s == null) return null;
 		s.refreshPositionAndAngles(player.getX(), player.getY(), player.getZ(), 0f, 0f);
 		Vec3d spot = null;
+		int none = 0, unloaded = 0, seen = 0, blocked = 0;
 		for (int i = 0; i < 16 && spot == null; i++) {
 			Vec3d c = s.randomGroundNear(player.getPos(), 30, 55);
-			if (c == null || !world.isChunkLoaded(BlockPos.ofFloored(c))) continue;
+			if (c == null) { none++; continue; }
+			if (!world.isChunkLoaded(BlockPos.ofFloored(c))) { unloaded++; continue; }
 			// Somewhere they can't see; failing that, at least not where they're looking.
 			boolean ok = i < 8 ? s.isSpotHidden(c) && !s.isSpotInSomeonesView(c) : !s.isSpotInSomeonesView(c);
-			if (!ok) continue;
+			if (!ok) { seen++; continue; }
 			s.refreshPositionAndAngles(c.x, c.y, c.z, 0f, 0f);
-			if (!world.isSpaceEmpty(s, s.getBoundingBox())) continue;
+			if (!world.isSpaceEmpty(s, s.getBoundingBox())) { blocked++; continue; }
 			spot = c;
 		}
+		lastNote = String.format("for %s: no ground %d, unloaded %d, seen %d, no room %d", player.getName().getString(), none, unloaded, seen, blocked);
 		if (spot == null) return null;
 		s.refreshPositionAndAngles(spot.x, spot.y, spot.z, world.getRandom().nextFloat() * 360f, 0f);
 		world.spawnEntity(s);

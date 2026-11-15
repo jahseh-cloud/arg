@@ -18,8 +18,12 @@ public final class HiveEvents {
 	public static final Identifier ADV_PARASITE = Spindle.id("parasite");
 	public static final Identifier ADV_SIGNAL_LOST = Spindle.id("signal_lost");
 
+	/** Last thing the hive logic did, for the self-test. */
+	public static String lastNote = "never ticked";
+
 	public static void tick(MinecraftServer server) {
 		if (server.getTicks() % 20 != 0) return;
+		lastNote = "ticked";
 		ServerWorld world = server.getOverworld();
 		Hivemind hive = Hivemind.of(world);
 		if (hive == null) return;
@@ -29,7 +33,10 @@ public final class HiveEvents {
 			if (p.isSpectator()) continue;
 			double d = p.getPos().distanceTo(c);
 			if (d < 150 && !state.hivePopulated && !state.broodmotherSlain) populate(world, hive, state);
-			if (hive.isInside(p.getPos())) grant(p, ADV_PARASITE);
+			if (hive.isInside(p.getPos())) {
+				lastNote = "inside: " + p.getName().getString();
+				grant(p, ADV_PARASITE);
+			}
 		}
 	}
 
@@ -41,6 +48,7 @@ public final class HiveEvents {
 		}
 		if (!player.getAdvancementTracker().getProgress(adv).isDone()) {
 			boolean ok = player.getAdvancementTracker().grantCriterion(adv, "done");
+			lastNote = "grant " + id + " -> " + ok + " criteria " + adv.value().criteria().keySet();
 			Spindle.LOGGER.info("Granting {} to {}: {}", id, player.getName().getString(), ok);
 		}
 	}

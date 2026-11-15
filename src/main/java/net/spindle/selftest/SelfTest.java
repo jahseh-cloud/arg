@@ -229,7 +229,7 @@ public final class SelfTest {
 		abstract String check();
 
 		String atTimeout() {
-			return "FAIL timed out";
+			return "FAIL timed out " + notes;
 		}
 
 		Vec3d at(double x, double y, double z) {

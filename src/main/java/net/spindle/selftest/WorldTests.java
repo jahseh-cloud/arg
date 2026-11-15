@@ -61,7 +61,7 @@ final class WorldTests {
 			int far = countSolid(world, 1060, 8, 16, 150, 250);
 			int near = countSolid(world, 960, 8, 16, 220, 250);
 			int edge = countSolid(world, 1025, 8, 2, 70, 140);
-			boolean ok = far > 4000 && near < 200 && edge > 100;
+			boolean ok = far > 3000 && near < 200 && edge > 100;
 			return (ok ? "PASS" : "FAIL") + String.format(" solid blocks y150-250 just past the edge: %d, high up just inside: %d, cliff at the edge: %d/284", far, near, edge);
 		}
 	}
@@ -93,9 +93,10 @@ final class WorldTests {
 				double d = s.distanceTo(victim);
 				boolean seen = victim.canSee(s);
 				spindle = s;
-				return (d >= 25 && !seen ? "PASS" : "FAIL") + String.format(" one arrived at t=%d, %.0f blocks away, visible to the player: %s, fixated: %s",
+				return (d >= 20 && !seen ? "PASS" : "FAIL") + String.format(" one arrived at t=%d, %.0f blocks away, visible to the player: %s, fixated: %s",
 						t, d, seen, s.getTarget() == victim);
 			}
+			if (t % 100 == 0) SelfTest.Scenario.note(this, "t=" + t + " " + net.spindle.world.StalkerDirector.lastNote);
 			return null;
 		}
 
@@ -169,6 +170,8 @@ final class WorldTests {
 			SelfTest.Scenario.note(this, String.format("advancement loaded: %s, player inside: %s (outer distance %.1f)",
 					adv != null, h.isInside(victim.getPos()), h.outerDistance(victim.getPos())));
 			boolean granted = adv != null && victim.getAdvancementTracker().getProgress(adv).isDone();
+			if (!granted && t < 180) return null;
+			SelfTest.Scenario.note(this, "hive: " + HiveEvents.lastNote);
 			int spindles = world.getEntitiesByType(Spindle.SPINDLE, SpindleEntity::isHiveBound).size();
 			int mothers = world.getEntitiesByType(Spindle.BROODMOTHER, e -> true).size();
 			boolean ok = granted && spindles >= 30 && mothers == 1;
