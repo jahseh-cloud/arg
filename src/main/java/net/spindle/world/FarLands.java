@@ -140,18 +140,21 @@ public final class FarLands {
 			int v = px > pz ? z : x;
 			double tunnel = MathHelper.lerp(s, 600.0, 60.0);
 			double shear = s < 0.3 ? 0 : (s - 0.3) * 1.4 * Math.signum(wobble + 0.01);
+			// Deep in, the world tears: blocky columns slipped up and down against each other.
+			if (s > 0.45) yy += lattice(Math.floorDiv(v, 8), 7, Math.floorDiv(u, 16), 24) * 60.0 * (s - 0.45);
 			double vv = v + yy * shear;
 			double chaos = MathHelper.lerp(s * s, 1.0, 0.45); // strata get shorter and choppier
-			d = cell(vv / (32.0 * chaos), yy / 5.0, u / tunnel, 21)
-					+ 0.5 * cell(vv / (16.0 * chaos), yy / 3.0, u / tunnel, 22)
-					+ 0.25 * cell(vv / 6.0, yy / 2.0, u / (tunnel * 0.5), 23);
+			double ys = 9.0 - 4.0 * s; // strata get thinner deeper in
+			d = cell(vv / (32.0 * chaos), yy / ys, u / tunnel, 21)
+					+ 0.5 * cell(vv / (16.0 * chaos), yy / (ys * 0.6), u / tunnel, 22)
+					+ 0.25 * cell(vv / 6.0, yy / 2.5, u / (tunnel * 0.5), 23);
 		}
 
 		// The ground hardly matters: the strata go all the way up. Deeper in, even less.
 		double grip = MathHelper.lerp(s, 1.0, 0.3);
 		d += (60.0 - yy) / 400.0 * grip;
 		d -= Math.max(0, y - 238) / 10.0; // thins out just under the top of the world
-		return d + 0.07;
+		return d + 0.16;
 	}
 
 	/** What a solid Far Lands block is made of. */
