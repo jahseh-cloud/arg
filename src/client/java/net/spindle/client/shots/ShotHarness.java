@@ -251,7 +251,7 @@ public final class ShotHarness {
 		gallery(world, "g02_along_the_wall", 995, 165, -150, 1024, 120, 150, false);
 		gallery(world, "g03_down_a_tunnel", 1100, 110, 40, 1260, -1, 40, true);
 		gallery(world, "g04_the_corner", 965, 160, 965, 1060, 130, 1060, false);
-		gallery(world, "g05_300_in_from_above", 1300, 252, 0, 1420, 140, 40, false);
+		gallery(world, "g05_300_in", 1320, 120, 0, 1420, -1, 30, true);
 		gallery(world, "g06_500_in", 1520, 130, 0, 1620, -1, 60, true);
 		gallery(world, "g07_800_in", 1830, 140, 0, 1930, -1, 60, true);
 		gallery(world, "g08_2000_in", 3030, 150, 0, 3130, -1, 60, true);
@@ -260,17 +260,17 @@ public final class ShotHarness {
 		if (oasis != null) {
 			int r = oasis.radius();
 			int gy = fl.oasisGround(oasis.x(), oasis.z(), world.getSeaLevel());
-			gallery(world, "g09_oasis", oasis.x() - r - 25, gy + 45, oasis.z() - 15, oasis.x() + 10, gy, oasis.z(), false);
+			gallery(world, "g09_oasis", oasis.x() - (int) (r * 0.8), gy + 30, oasis.z() - 10, oasis.x() + 15, gy, oasis.z() + 5, false);
 		}
 		if (hive != null) {
 			Vec3d c = Vec3d.ofCenter(hive.center);
-			gallery(world, "g10_near_the_hive", (int) c.x - 150, 235, (int) c.z - 40, (int) c.x, (int) c.y, (int) c.z, false);
+			gallery(world, "g10_near_the_hive", (int) c.x - 120, (int) c.y + 120, (int) c.z - 30, (int) c.x, (int) c.y, (int) c.z, false);
 		}
 	}
 
 	/** Is there open air around here (not just a gap the camera would be wedged into)? */
 	private static boolean open(ServerWorld world, BlockPos p) {
-		for (int dx = -3; dx <= 3; dx += 3) for (int dy = -3; dy <= 3; dy += 3) for (int dz = -3; dz <= 3; dz += 3) {
+		for (int dx = -2; dx <= 2; dx += 2) for (int dy = -2; dy <= 2; dy += 2) for (int dz = -2; dz <= 2; dz += 2) {
 			if (!world.getBlockState(p.add(dx, dy, dz)).isAir()) return false;
 		}
 		return true;
@@ -280,7 +280,7 @@ public final class ShotHarness {
 	private static void gallery(ServerWorld world, String name, int x, int y, int z, int lx, int ly, int lz, boolean level) {
 		Scenes.prepare(world, Math.min(x, lx) - 48, Math.min(z, lz) - 48, Math.max(x, lx) + 48, Math.max(z, lz) + 48);
 		BlockPos cam = null;
-		for (int i = 0; i <= 140 && cam == null; i++) {
+		for (int i = 0; i <= 80 && cam == null; i++) {
 			int dy = (i % 2 == 0) ? i / 2 : -(i + 1) / 2;
 			BlockPos p = new BlockPos(x, y + dy, z);
 			if (p.getY() > 4 && p.getY() < 300 && open(world, p)) cam = p;

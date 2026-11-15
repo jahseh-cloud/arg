@@ -153,7 +153,10 @@ public final class FarLands {
 		// The ground hardly matters: the strata go all the way up. Deeper in, even less.
 		double grip = MathHelper.lerp(s, 1.0, 0.3);
 		d += (60.0 - yy) / 400.0 * grip;
-		d -= Math.max(0, y - 238) / 10.0; // thins out just under the top of the world
+		// An uneven skyline: towers in places, broken-off lower tops in others, lower deeper in.
+		double sky = 236 - 70 * (region.sample(x / 90.0 + 31.7, z / 90.0 - 12.3) * 0.5 + 0.5) * (0.4 + 0.6 * s);
+		d -= Math.max(0, y - sky) / 14.0;
+		d -= Math.max(0, y - 238) / 10.0;
 		return d + 0.16;
 	}
 
