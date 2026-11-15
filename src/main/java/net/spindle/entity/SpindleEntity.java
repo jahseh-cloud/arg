@@ -573,12 +573,14 @@ public class SpindleEntity extends HostileEntity {
 		World world = getWorld();
 		Vec3d low = spot.add(0, 1.0, 0);
 		Vec3d high = spot.add(0, coreHeightFor(clearHeightAt(spot)), 0);
-		boolean dark = darknessHides && world.getLightLevel(BlockPos.ofFloored(low)) < 4;
+		int light = world.getLightLevel(BlockPos.ofFloored(low));
+		boolean dark = darknessHides && light <= 5;
 		for (PlayerEntity player : world.getPlayers()) {
 			if (player.isSpectator() || !player.isAlive()) continue;
 			double d2 = player.squaredDistanceTo(spot);
 			if (d2 > 100 * 100) continue;
-			if (dark && d2 > 10 * 10) continue;
+			// A black shape in the dark: hard to make out past a dozen blocks, impossible past a few dozen.
+			if (dark && d2 > (light <= 2 ? 10 * 10 : 24 * 24)) continue;
 			Vec3d eye = player.getEyePos();
 			if (hasLineOfSight(eye, low) || hasLineOfSight(eye, high)) return true;
 		}

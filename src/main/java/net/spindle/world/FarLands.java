@@ -60,7 +60,8 @@ public final class FarLands {
 		double d = walls.sample(x / 22.0, y / 150.0, z / 22.0)
 				+ 0.45 * MathHelper.sin((float) (y * 0.42 + region * 5.0))
 				+ 0.18 * detail.sample(x / 7.0, y / 9.0, z / 7.0)
-				+ (72.0 - y) / 135.0;
+				+ (70.0 - y) / 230.0
+				- Math.max(0, y - 235) / 12.0; // fades out just under the top of the world
 		// The boundary is a cliff.
 		int past = Math.max(Math.abs(x), Math.abs(z)) - EDGE;
 		if (past < 24) d += (24 - past) / 24.0 * 0.85;

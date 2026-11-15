@@ -73,10 +73,12 @@ public final class StalkerDirector {
 		if (s == null) return null;
 		s.refreshPositionAndAngles(player.getX(), player.getY(), player.getZ(), 0f, 0f);
 		Vec3d spot = null;
-		for (int i = 0; i < 12 && spot == null; i++) {
+		for (int i = 0; i < 16 && spot == null; i++) {
 			Vec3d c = s.randomGroundNear(player.getPos(), 30, 55);
 			if (c == null || !world.isChunkLoaded(BlockPos.ofFloored(c))) continue;
-			if (!s.isSpotHidden(c) || s.isSpotInSomeonesView(c)) continue;
+			// Somewhere they can't see; failing that, at least not where they're looking.
+			boolean ok = i < 8 ? s.isSpotHidden(c) && !s.isSpotInSomeonesView(c) : !s.isSpotInSomeonesView(c);
+			if (!ok) continue;
 			s.refreshPositionAndAngles(c.x, c.y, c.z, 0f, 0f);
 			if (!world.isSpaceEmpty(s, s.getBoundingBox())) continue;
 			spot = c;

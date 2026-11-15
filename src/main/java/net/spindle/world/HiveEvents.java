@@ -35,7 +35,14 @@ public final class HiveEvents {
 
 	public static void grant(ServerPlayerEntity player, Identifier id) {
 		AdvancementEntry adv = player.getServer().getAdvancementLoader().get(id);
-		if (adv != null) player.getAdvancementTracker().grantCriterion(adv, "done");
+		if (adv == null) {
+			Spindle.LOGGER.warn("Advancement {} is missing", id);
+			return;
+		}
+		if (!player.getAdvancementTracker().getProgress(adv).isDone()) {
+			boolean ok = player.getAdvancementTracker().grantCriterion(adv, "done");
+			Spindle.LOGGER.info("Granting {} to {}: {}", id, player.getName().getString(), ok);
+		}
 	}
 
 	/** Fills every chamber with sleeping Spindles and wakes the Broodmother in the heart. */
