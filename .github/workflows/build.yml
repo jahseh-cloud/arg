@@ -23,14 +23,21 @@ jobs:
         run: |
           msg=$(grep -E "error:|\.java:[0-9]+|FAILURE|What went wrong|Could not" -A2 build.log | grep -v "^\s*at " | head -150 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::error title=Build failed::${msg}"
-      - name: automated tests
+      - name: behaviour tests
+        if: ${{ !contains(github.event.head_commit.message, '[quick]') }}
+        shell: bash
         run: |
-          : > selftest.log
+          set -o pipefail
           ./ci/selftest.sh behavior 2>&1 | tee -a selftest-out.log
+      - name: world tests
+        shell: bash
+        run: |
+          set -o pipefail
           ./ci/selftest.sh world 2>&1 | tee -a selftest-out.log
       - name: report test results
         if: always()
         run: |
+          touch selftest.log
           [ -f selftest-out.log ] || exit 0
           msg=$(grep -E "RESULT|DONE|CRASH|error" selftest-out.log | cut -c1-400 | head -80 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
           echo "::notice title=Selftest::${msg}"
@@ -47,7 +54,7 @@ jobs:
             selftest.log
             traces.txt
       - name: screenshots (dev branch only)
-        if: success() && github.ref != 'refs/heads/main'
+        if: success() && github.ref != 'refs/heads/main' && !contains(github.event.head_commit.message, '[quick]')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

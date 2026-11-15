@@ -16,6 +16,10 @@ SPINDLE_SELFTEST=$MODE timeout 1500 ./gradlew runServer --no-daemon --args=nogui
 echo "================ SELFTEST SUMMARY ($MODE)"
 grep -E "SELFTEST (RESULT|DONE|CRASH)" server-$MODE.log | sed 's/.*SELFTEST //'
 grep "SELFTEST" server-$MODE.log >> selftest.log
-grep -q "SELFTEST DONE" server-$MODE.log || { echo "::error title=Selftest $MODE::server never finished the tests"; grep -iE -A12 "exception|error" server-$MODE.log | grep -v "^\s*at " | head -60; exit 1; }
+if ! grep -q "SELFTEST DONE" server-$MODE.log; then
+  msg=$( (grep -E "SELFTEST (START|RESULT|TRACE)" server-$MODE.log | sed 's/.*SELFTEST //' | cut -c1-260 | tail -25; echo "---- last log lines"; tail -25 server-$MODE.log | cut -c1-260; echo "---- exceptions"; grep -E -A6 "Exception|Error" server-$MODE.log | grep -v "^\s*at java\|^\s*at com.mojang" | cut -c1-260 | head -40) | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+  echo "::error title=Selftest $MODE did not finish::${msg}"
+  exit 1
+fi
 if grep -iE -A8 "Exception" server-$MODE.log | grep -qi "net.spindle"; then echo "::error title=Selftest $MODE::exception in spindle code"; grep -iE -B2 -A14 "Exception" server-$MODE.log | grep -v "^\s*at net.minecraft\|^\s*at java" | head -60; exit 1; fi
 exit 0
