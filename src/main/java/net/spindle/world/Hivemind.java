@@ -147,8 +147,18 @@ public final class Hivemind {
 		return CACHE.computeIfAbsent(seed, Hivemind::new);
 	}
 
+	private static final Map<NoiseConfig, Long> SEEDS = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+	/**
+	 * The world's Hivemind/Far Lands seed. Called from worldgen threads, so it only uses the ore random
+	 * splitter, which is immutable (getOrCreateRandomDeriver is not thread-safe and can hang the game).
+	 */
 	public static long seedFrom(NoiseConfig config) {
-		return config.getOrCreateRandomDeriver(Spindle.id("hivemind")).split(0, 0, 0).nextLong();
+		Long cached = SEEDS.get(config);
+		if (cached != null) return cached;
+		long seed = config.getOreRandomDeriver().split("spindle:hivemind").nextLong();
+		SEEDS.put(config, seed);
+		return seed;
 	}
 
 	@Nullable
