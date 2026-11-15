@@ -190,7 +190,7 @@ final class WorldTests {
 
 		@Override
 		void setup() {
-			List<BroodmotherEntity> list = world.getEntitiesByType(Spindle.BROODMOTHER, e -> true);
+			List<? extends BroodmotherEntity> list = world.getEntitiesByType(Spindle.BROODMOTHER, e -> true);
 			mother = list.isEmpty() ? null : list.get(0);
 			// Put the hive's Spindles to sleep for good so they don't kill our player before the boss does anything.
 			for (SpindleEntity s : world.getEntitiesByType(Spindle.SPINDLE, e -> true)) s.discard();
