@@ -134,6 +134,7 @@ public final class SelfTest {
 				}
 			}
 			StringBuilder out = new StringBuilder(map.size() + " positions: " + counts);
+			for (var e : map.long2ObjectEntrySet()) out.append(" @").append(new net.minecraft.util.math.ChunkPos(e.getLongKey())).append("=").append(e.getValue());
 			// Players are tracked separately from tickets.
 			for (java.lang.reflect.Field f : net.minecraft.server.world.ChunkTicketManager.class.getDeclaredFields()) {
 				f.setAccessible(true);
