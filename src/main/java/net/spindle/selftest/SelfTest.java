@@ -196,6 +196,19 @@ public final class SelfTest {
 	}
 
 	private static volatile MinecraftServer serverRef;
+	public static volatile boolean watchTickets;
+	private static int ticketStacks;
+
+	public static void ticketAdded(net.minecraft.util.math.ChunkPos pos) {
+		if (ticketStacks++ > 6) return;
+		StringBuilder b = new StringBuilder("TICKETSTACK " + pos + " on " + Thread.currentThread().getName());
+		for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
+			String t = e.toString();
+			if (t.contains("java.base")) continue;
+			b.append(" <- ").append(t.replaceAll("\\(.*", ""));
+		}
+		System.out.println(b);
+	}
 
 	private static void tick(MinecraftServer server) {
 		serverRef = server;
@@ -273,6 +286,7 @@ public final class SelfTest {
 				s.setup();
 			}
 			s.t++;
+			if (worldMode() && s.maxTicks - s.t < 3 && SCENARIOS.get(SCENARIOS.size() - 1) == s) watchTickets = true;
 			if (s.victim != null) s.victim.drive();
 			s.observe();
 			String r = s.check();

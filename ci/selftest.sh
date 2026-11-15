@@ -22,6 +22,7 @@ while kill -0 $RUN 2>/dev/null; do
   if [ -n "$DONE_AT" ] && [ $((SECONDS - DONE_AT)) -gt 60 ]; then
     echo "::warning title=Selftest $MODE slow to stop::server still running 60s after DONE"
     grep "SHUTDOWNDUMP" server-$MODE.log | head -200
+    grep "TICKETSTACK" server-$MODE.log | cut -c1-1500
     break
   fi
 done
