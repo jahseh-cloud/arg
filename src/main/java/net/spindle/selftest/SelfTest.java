@@ -305,6 +305,8 @@ public final class SelfTest {
 		Scenes.cmd(server, "save-all");
 		log("TIMING " + net.spindle.world.FarLands.timing());
 		log("DONE passed=" + pass + " failed=" + fail + " ticks=" + ticks);
+		// A tick sprint still running holds the shutdown back until its ticks are used up.
+		server.getTickManager().stopSprinting();
 		server.stop(false);
 	}
 
