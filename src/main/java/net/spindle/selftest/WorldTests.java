@@ -97,6 +97,7 @@ final class WorldTests {
 			}
 			var biome = world.getBiome(new BlockPos(o.getX(), gy, o.getZ())).getKey().map(k -> k.getValue().getPath()).orElse("?");
 			terrain = String.format("oasis at %d %d r%d, ground %d..%d, biome %s", oasis.x(), oasis.z(), oasis.radius(), min, max, biome);
+			for (int dx = -5; dx <= 5; dx++) for (int dz = -5; dz <= 5; dz++) world.setChunkForced((o.getX() >> 4) + dx, (o.getZ() >> 4) + dz, true);
 			victim = TestPlayer.spawn(world, "t_oasis", Vec3d.ofBottomCenter(new BlockPos(o.getX(), gy, o.getZ())), 0f);
 		}
 
@@ -107,6 +108,7 @@ final class WorldTests {
 					new net.minecraft.util.math.Box(o).expand(oasis.radius() + 60, 300, oasis.radius() + 60), e -> true).size();
 			if (villagers == 0 && t < 800) return null;
 			boolean flat = terrain.contains("biome plains");
+			for (int dx = -5; dx <= 5; dx++) for (int dz = -5; dz <= 5; dz++) world.setChunkForced((o.getX() >> 4) + dx, (o.getZ() >> 4) + dz, false);
 			return (villagers > 0 && flat ? "PASS " : "FAIL ") + terrain + ", villagers: " + villagers + " (" + net.spindle.world.HiveEvents.lastNote + ")";
 		}
 	}

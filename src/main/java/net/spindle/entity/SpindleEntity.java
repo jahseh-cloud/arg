@@ -619,6 +619,11 @@ public class SpindleEntity extends HostileEntity {
 	/** Random standable ground position in a ring around center. */
 	@Nullable
 	public Vec3d randomGroundNear(Vec3d center, double minR, double maxR) {
+		return randomGroundNear(center, minR, maxR, false);
+	}
+
+	/** surface: also accept the surface when it's well above or below (for arriving over hills). */
+	public Vec3d randomGroundNear(Vec3d center, double minR, double maxR, boolean surface) {
 		World world = getWorld();
 		for (int attempt = 0; attempt < 6; attempt++) {
 			double ang = getRandom().nextDouble() * Math.PI * 2;
@@ -633,7 +638,7 @@ public class SpindleEntity extends HostileEntity {
 				if (SpaceMap.standable(world, p) && world.getFluidState(p).isEmpty()) return Vec3d.ofBottomCenter(p);
 			}
 			// Hills: fall back to the surface if it isn't far above or below.
-			if (world.isChunkLoaded(new BlockPos(x, cy, z))) {
+			if (surface && world.isChunkLoaded(new BlockPos(x, cy, z))) {
 				BlockPos top = new BlockPos(x, world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z), z);
 				if (Math.abs(top.getY() - cy) <= 24 && SpaceMap.standable(world, top) && world.getFluidState(top).isEmpty()) {
 					return Vec3d.ofBottomCenter(top);

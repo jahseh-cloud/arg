@@ -80,7 +80,7 @@ public final class StalkerDirector {
 		Vec3d spot = null;
 		int none = 0, unloaded = 0, seen = 0, blocked = 0;
 		for (int i = 0; i < 16 && spot == null; i++) {
-			Vec3d c = s.randomGroundNear(player.getPos(), 30, 55);
+			Vec3d c = s.randomGroundNear(player.getPos(), 30, 55, true);
 			if (c == null) { none++; continue; }
 			if (!world.isChunkLoaded(BlockPos.ofFloored(c))) { unloaded++; continue; }
 			// Somewhere they can't see; failing that, at least not where they're looking.
