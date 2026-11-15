@@ -44,6 +44,7 @@ public final class SelfTest {
 	public static void init() {
 		if (!enabled()) return;
 		ServerTickEvents.END_SERVER_TICK.register(SelfTest::tick);
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(SelfTest::dropLeftoverTickets);
 		Thread dog = new Thread(SelfTest::watchdog, "spindle-selftest-watchdog");
 		dog.setDaemon(true);
 		dog.start();
@@ -196,18 +197,40 @@ public final class SelfTest {
 	}
 
 	private static volatile MinecraftServer serverRef;
-	public static volatile boolean watchTickets;
-	private static int ticketStacks;
-
-	public static void ticketAdded(net.minecraft.util.math.ChunkPos pos) {
-		if (ticketStacks++ > 6) return;
-		StringBuilder b = new StringBuilder("TICKETSTACK " + pos + " on " + Thread.currentThread().getName());
-		for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
-			String t = e.toString();
-			if (t.contains("java.base")) continue;
-			b.append(" <- ").append(t.replaceAll("\\(.*", ""));
+	/**
+	 * Vanilla leaves one-tick "unknown" chunk tickets from the last tick (random ticks, spawning...);
+	 * on this headless test server they can hold the shutdown back for minutes. Clear them.
+	 */
+	private static void dropLeftoverTickets(MinecraftServer server) {
+		for (var w : server.getWorlds()) {
+			try {
+				Object tm = null;
+				for (java.lang.reflect.Field f : net.minecraft.server.world.ServerChunkManager.class.getDeclaredFields()) {
+					if (net.minecraft.server.world.ChunkTicketManager.class.isAssignableFrom(f.getType())) {
+						f.setAccessible(true);
+						tm = f.get(w.getChunkManager());
+					}
+				}
+				if (tm == null) continue;
+				java.util.List<net.minecraft.util.math.ChunkPos> unknown = new java.util.ArrayList<>();
+				for (java.lang.reflect.Field f : net.minecraft.server.world.ChunkTicketManager.class.getDeclaredFields()) {
+					if (!f.getType().getName().contains("Long2ObjectOpenHashMap")) continue;
+					f.setAccessible(true);
+					var map = (it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<?>) f.get(tm);
+					for (var e : map.long2ObjectEntrySet()) {
+						for (Object t : (Iterable<?>) e.getValue()) {
+							if (t instanceof net.minecraft.server.world.ChunkTicket<?> ticket && ticket.getType() == net.minecraft.server.world.ChunkTicketType.UNKNOWN) {
+								unknown.add(new net.minecraft.util.math.ChunkPos(e.getLongKey()));
+							}
+						}
+					}
+				}
+				for (var pos : unknown) w.getChunkManager().removeTicket(net.minecraft.server.world.ChunkTicketType.UNKNOWN, pos, 0, pos);
+				if (!unknown.isEmpty()) log("dropped " + unknown.size() + " leftover chunk tickets in " + w.getRegistryKey().getValue());
+			} catch (Throwable e) {
+				log("could not drop leftover tickets: " + e);
+			}
 		}
-		System.out.println(b);
 	}
 
 	private static void tick(MinecraftServer server) {
@@ -286,7 +309,6 @@ public final class SelfTest {
 				s.setup();
 			}
 			s.t++;
-			if (worldMode() && s.maxTicks - s.t < 3 && SCENARIOS.get(SCENARIOS.size() - 1) == s) watchTickets = true;
 			if (s.victim != null) s.victim.drive();
 			s.observe();
 			String r = s.check();

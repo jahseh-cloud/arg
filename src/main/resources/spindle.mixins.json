@@ -3,7 +3,7 @@
 	"package": "net.spindle.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"NoiseChunkGeneratorMixin", "FluidFeatureMixin", "TicketWatchMixin"
+		"NoiseChunkGeneratorMixin", "FluidFeatureMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
