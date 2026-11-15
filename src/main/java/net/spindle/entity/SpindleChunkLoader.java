@@ -33,8 +33,31 @@ public class SpindleChunkLoader extends PersistentState {
 		return world.getPersistentStateManager().getOrCreate(TYPE, ID);
 	}
 
+	/** Tickets handed out, so they can all be taken back when the server stops. */
+	private static final Map<ServerWorld, java.util.Set<ChunkPos>> TICKETS = new java.util.concurrent.ConcurrentHashMap<>();
+	private static volatile boolean stopping;
+
 	public static void keepLoaded(ServerWorld world, ChunkPos pos) {
+		if (stopping) return;
 		world.getChunkManager().addTicket(TICKET, pos, RADIUS, pos);
+		TICKETS.computeIfAbsent(world, w -> java.util.concurrent.ConcurrentHashMap.newKeySet()).add(pos);
+	}
+
+	public static void serverStarting() {
+		stopping = false;
+		TICKETS.clear();
+	}
+
+	/**
+	 * The server stops counting down ticket timers while it shuts down, so without this every Spindle
+	 * keeps its chunks pinned and the shutdown crawls.
+	 */
+	public static void releaseAll() {
+		stopping = true;
+		TICKETS.forEach((world, set) -> {
+			for (ChunkPos pos : set) world.getChunkManager().removeTicket(TICKET, pos, RADIUS, pos);
+		});
+		TICKETS.clear();
 	}
 
 	/** Called every second by each living Spindle. */

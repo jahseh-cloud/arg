@@ -80,6 +80,9 @@ public class Spindle implements ModInitializer {
 		ItemGroupEvents.modifyEntriesEvent(ItemGroups.NATURAL).register(entries -> entries.add(SpindleBlocks.HIVEMASS_ITEM));
 
 		// After a restart, reload wherever each Spindle was so it keeps going without anyone nearby.
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STOPPING.register(server ->
+				net.spindle.entity.SpindleChunkLoader.releaseAll());
+		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTING.register(server -> net.spindle.entity.SpindleChunkLoader.serverStarting());
 		net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents.SERVER_STARTING.register(server ->
 				net.spindle.world.FarLands.plains = server.getRegistryManager().get(net.minecraft.registry.RegistryKeys.BIOME)
 						.entryOf(net.minecraft.world.biome.BiomeKeys.PLAINS));

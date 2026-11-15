@@ -84,6 +84,13 @@ public final class SelfTest {
 				return;
 			}
 			StringBuilder b = new StringBuilder("SHUTDOWNDUMP " + n + "\n");
+			MinecraftServer srv = serverRef;
+			if (srv != null) {
+				for (var w : srv.getWorlds()) {
+					b.append("SHUTDOWNDUMP world ").append(w.getRegistryKey().getValue()).append(": loaded chunks ")
+							.append(w.getChunkManager().getLoadedChunkCount()).append(", forced ").append(w.getForcedChunks().size()).append("\n");
+				}
+			}
 			for (var entry : Thread.getAllStackTraces().entrySet()) {
 				Thread t = entry.getKey();
 				StackTraceElement[] st = entry.getValue();
@@ -103,7 +110,10 @@ public final class SelfTest {
 		Spindle.LOGGER.info("SELFTEST " + line);
 	}
 
+	private static volatile MinecraftServer serverRef;
+
 	private static void tick(MinecraftServer server) {
+		serverRef = server;
 		if (finished || !server.isDedicated()) return;
 		ticks++;
 		try {
