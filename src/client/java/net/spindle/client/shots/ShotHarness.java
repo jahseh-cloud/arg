@@ -220,7 +220,7 @@ public final class ShotHarness {
 	private static void buildWorldShots(MinecraftServer server, ServerWorld world) {
 		net.spindle.world.Hivemind hive = net.spindle.world.Hivemind.of(world);
 		Scenes.prepare(world, 980, -40, 1180, 40);
-		SHOTS.add(new Shot("10_farlands_edge", new Vec3d(985, 150, -30), () -> new Vec3d(1080, 120, 10), 60, () -> true));
+		SHOTS.add(new Shot("10_farlands_edge", new Vec3d(985, 150, -30), () -> new Vec3d(1080, 120, 10), 200, () -> true));
 		SHOTS.add(new Shot("11_farlands_inside", new Vec3d(1100, 225, 0), () -> new Vec3d(1180, 140, 40), 60, () -> true));
 		if (hive == null) {
 			log("no hivemind in this world");
@@ -229,7 +229,12 @@ public final class ShotHarness {
 		Vec3d c = Vec3d.ofCenter(hive.center);
 		Scenes.prepare(world, hive.bounds.getMinX() - 60, hive.bounds.getMinZ() - 60, hive.bounds.getMaxX() + 60, hive.bounds.getMaxZ() + 60);
 		Vec3d out = hive.entrances.isEmpty() ? new Vec3d(1, 0, 0) : hive.entrances.get(0).subtract(c).normalize();
-		SHOTS.add(new Shot("12_hive_exterior", c.add(out.multiply(175)).add(0, 70, 0), () -> c, 80, () -> true));
+		// From the edge of the hollow around it, looking back at the blob.
+		out = new Vec3d(out.x, 0, out.z).normalize();
+		Vec3d eye = c.add(0, 45, 0);
+		for (int i = 0; i < 200 && hive.outerDistance(eye) < net.spindle.world.Hivemind.HALO + 45 * 0.55 - 4; i++) eye = eye.add(out);
+		Vec3d exteriorEye = eye;
+		SHOTS.add(new Shot("12_hive_exterior", exteriorEye, () -> c, 160, () -> true));
 		net.spindle.world.HiveEvents.populate(world, hive, net.spindle.world.SpindleWorldState.get(server));
 		net.spindle.world.Hivemind.Sphere ch = hive.chambers.get(0);
 		SHOTS.add(new Shot("13_hive_chamber", ch.c().add(ch.r() * 0.6, 0, ch.r() * 0.3), () -> ch.c().add(0, -ch.r() * 0.4, 0), 80, () -> true));

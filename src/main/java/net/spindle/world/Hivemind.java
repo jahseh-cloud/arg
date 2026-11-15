@@ -39,6 +39,8 @@ public final class Hivemind {
 	public final List<Tunnel> tunnels = new ArrayList<>();
 	public final List<Vec3d> entrances = new ArrayList<>();
 	public final BlockBox bounds;
+	/** How far the Far Lands are cleared away from the blob. */
+	public static final double HALO = 26;
 	private final SimplexNoiseSampler skin;
 	private final SimplexNoiseSampler wobble;
 
@@ -131,9 +133,9 @@ public final class Hivemind {
 			entrances.add(c.add(dir.multiply(110)));
 		}
 
-		int reach = 125;
+		int reach = 155;
 		bounds = new BlockBox(center.getX() - reach, Math.max(FarLands.MIN_Y, center.getY() - 100), center.getZ() - reach,
-				center.getX() + reach, Math.min(FarLands.MAX_Y + 40, center.getY() + 100), center.getZ() + reach);
+				center.getX() + reach, Math.min(FarLands.MAX_Y + 40, center.getY() + 160), center.getZ() + reach);
 	}
 
 	private static Vec3d randomDir(java.util.Random r, double flatten) {
@@ -206,7 +208,12 @@ public final class Hivemind {
 		if (!bounds.contains(x, y, z)) return null;
 		Vec3d p = new Vec3d(x + 0.5, y + 0.5, z + 0.5);
 		if (isCarved(p)) return net.minecraft.block.Blocks.AIR.getDefaultState();
-		if (outerDistance(p) < 0) return SpindleBlocks.HIVEMASS.getDefaultState();
+		double d = outerDistance(p);
+		if (d < 0) return SpindleBlocks.HIVEMASS.getDefaultState();
+		// The Far Lands keep their distance: a hollow around the blob, open to the sky, with a floor.
+		// Widens upwards into a crater, so it can be spotted from the tops of the Far Lands.
+		double halo = HALO + Math.max(0, y - center.getY()) * 0.55;
+		if (d < halo && y > center.getY() - 34) return net.minecraft.block.Blocks.AIR.getDefaultState();
 		return null;
 	}
 
