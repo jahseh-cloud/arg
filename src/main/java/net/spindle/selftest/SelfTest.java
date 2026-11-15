@@ -134,6 +134,20 @@ public final class SelfTest {
 				}
 			}
 			StringBuilder out = new StringBuilder(map.size() + " positions: " + counts);
+			// Players are tracked separately from tickets.
+			for (java.lang.reflect.Field f : net.minecraft.server.world.ChunkTicketManager.class.getDeclaredFields()) {
+				f.setAccessible(true);
+				Object v = f.get(tm);
+				if (v instanceof it.unimi.dsi.fastutil.longs.Long2ObjectMap<?> m2 && f != tf) {
+					StringBuilder names = new StringBuilder();
+					for (Object set : m2.values()) {
+						if (set instanceof Iterable<?> it) for (Object o : it) {
+							if (o instanceof net.minecraft.server.network.ServerPlayerEntity sp) names.append(sp.getName().getString()).append(sp.isRemoved() ? "(removed)" : "").append(" ");
+						}
+					}
+					out.append(" | ").append(f.getName()).append(" ").append(m2.size()).append(" ").append(names);
+				}
+			}
 			// What are the chunks waiting to unload stuck on?
 			Object lm = w.getChunkManager().chunkLoadingManager;
 			for (java.lang.reflect.Field f : lm.getClass().getDeclaredFields()) {
