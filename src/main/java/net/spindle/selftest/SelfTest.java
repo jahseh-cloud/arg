@@ -133,7 +133,26 @@ public final class SelfTest {
 					counts.merge(key.length() > 60 ? key.substring(0, 60) : key, 1, Integer::sum);
 				}
 			}
-			return map.size() + " positions: " + counts;
+			StringBuilder out = new StringBuilder(map.size() + " positions: " + counts);
+			// What are the chunks waiting to unload stuck on?
+			Object lm = w.getChunkManager().chunkLoadingManager;
+			for (java.lang.reflect.Field f : lm.getClass().getDeclaredFields()) {
+				if (!f.getType().getName().contains("Long2ObjectLinkedOpenHashMap")) continue;
+				f.setAccessible(true);
+				var holders = (it.unimi.dsi.fastutil.longs.Long2ObjectLinkedOpenHashMap<?>) f.get(lm);
+				out.append(" | ").append(f.getName()).append(" size ").append(holders.size());
+				int shown = 0;
+				java.util.Map<String, Integer> futs = new java.util.TreeMap<>();
+				for (var e : holders.long2ObjectEntrySet()) {
+					Object h = e.getValue();
+					if (!(h instanceof net.minecraft.server.world.ChunkHolder holder)) continue;
+					String fs = holder.getSavingFuture().toString().replaceAll(".*\\[", "[").replaceAll("[0-9]+ dependents", "# dependents");
+					futs.merge(fs, 1, Integer::sum);
+					if (shown++ < 4) out.append(" ").append(new net.minecraft.util.math.ChunkPos(e.getLongKey())).append(" ").append(fs);
+				}
+				out.append(" futures ").append(futs);
+			}
+			return out.toString();
 		} catch (Throwable e) {
 			return "failed: " + e;
 		}
