@@ -12,7 +12,24 @@ if [ "$MODE" = "world" ]; then
 else
   printf 'level-type=minecraft\\:flat\nonline-mode=false\nspawn-protection=0\nmax-tick-time=-1\n' > run/server.properties
 fi
-SPINDLE_SELFTEST=$MODE timeout ${SELFTEST_TIMEOUT:-1500} ./gradlew runServer --no-daemon --args=nogui < /dev/null > server-$MODE.log 2>&1
+SPINDLE_SELFTEST=$MODE timeout ${SELFTEST_TIMEOUT:-1500} ./gradlew runServer --no-daemon --args=nogui < /dev/null > server-$MODE.log 2>&1 &
+RUN=$!
+# Once the tests are done the server should stop within seconds. If it doesn't, dump its threads.
+DONE_AT=""
+while kill -0 $RUN 2>/dev/null; do
+  sleep 5
+  if [ -z "$DONE_AT" ] && grep -q "SELFTEST DONE" server-$MODE.log; then DONE_AT=$SECONDS; fi
+  if [ -n "$DONE_AT" ] && [ $((SECONDS - DONE_AT)) -gt 60 ]; then
+    PID=$(pgrep -f "devlaunchinjector|KnotServer" | head -1)
+    echo "::warning title=Selftest $MODE slow to stop::server still running 60s after DONE, dumping threads"
+    [ -n "$PID" ] && kill -3 $PID; sleep 3
+    awk '/Full thread dump/{f=1} f' server-$MODE.log | grep -A25 '^"Server thread"\|^"Server Shutdown\|^"main"' | head -120
+    pkill -f "devlaunchinjector|KnotServer"; sleep 2
+    break
+  fi
+done
+wait $RUN
+echo "stopped $((SECONDS - ${DONE_AT:-$SECONDS}))s after DONE"
 echo "================ SELFTEST SUMMARY ($MODE)"
 grep -E "SELFTEST (RESULT|DONE|CRASH)" server-$MODE.log | sed 's/.*SELFTEST //'
 grep "SELFTEST" server-$MODE.log >> selftest.log
