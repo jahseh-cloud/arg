@@ -208,6 +208,7 @@ public final class SelfTest {
 			if (s.result.startsWith("PASS")) pass++; else fail++;
 		}
 		Scenes.cmd(server, "save-all");
+		log("TIMING " + net.spindle.world.FarLands.timing());
 		log("DONE passed=" + pass + " failed=" + fail + " ticks=" + ticks);
 		server.stop(false);
 	}

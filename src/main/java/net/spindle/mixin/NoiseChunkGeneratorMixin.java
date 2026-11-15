@@ -39,8 +39,13 @@ public abstract class NoiseChunkGeneratorMixin {
 		int seaLevel = settings.seaLevel();
 		cir.setReturnValue(cir.getReturnValue().thenApply(c -> {
 			long seed = Hivemind.seedFrom(noiseConfig);
+			long t0 = System.nanoTime();
 			FarLands.of(seed).apply(c, seaLevel, stone, noiseConfig.getMultiNoiseSampler());
+			long t1 = System.nanoTime();
 			Hivemind.of(seed).apply(c);
+			FarLands.timeFar.add(t1 - t0);
+			FarLands.timeHive.add(System.nanoTime() - t1);
+			FarLands.chunks.increment();
 			return c;
 		}));
 	}

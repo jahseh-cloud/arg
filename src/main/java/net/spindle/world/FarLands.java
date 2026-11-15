@@ -43,6 +43,15 @@ public final class FarLands {
 	@Nullable
 	public static volatile RegistryEntry<Biome> plains;
 
+	/** Generation cost, for the self-test. */
+	public static final java.util.concurrent.atomic.LongAdder timeFar = new java.util.concurrent.atomic.LongAdder(),
+			timeHive = new java.util.concurrent.atomic.LongAdder(), chunks = new java.util.concurrent.atomic.LongAdder();
+
+	public static String timing() {
+		long n = Math.max(1, chunks.sum());
+		return String.format("%d Far Lands chunks, %.1f ms Far Lands + %.1f ms Hivemind per chunk", chunks.sum(), timeFar.sum() / 1e6 / n, timeHive.sum() / 1e6 / n);
+	}
+
 	private static final Map<Long, FarLands> CACHE = new ConcurrentHashMap<>();
 
 	private final long seed;
