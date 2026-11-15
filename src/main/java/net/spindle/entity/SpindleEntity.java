@@ -632,6 +632,13 @@ public class SpindleEntity extends HostileEntity {
 				BlockPos p = new BlockPos(x, cy + dy, z);
 				if (SpaceMap.standable(world, p) && world.getFluidState(p).isEmpty()) return Vec3d.ofBottomCenter(p);
 			}
+			// Hills: fall back to the surface if it isn't far above or below.
+			if (world.isChunkLoaded(new BlockPos(x, cy, z))) {
+				BlockPos top = new BlockPos(x, world.getTopY(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, x, z), z);
+				if (Math.abs(top.getY() - cy) <= 24 && SpaceMap.standable(world, top) && world.getFluidState(top).isEmpty()) {
+					return Vec3d.ofBottomCenter(top);
+				}
+			}
 		}
 		return null;
 	}
