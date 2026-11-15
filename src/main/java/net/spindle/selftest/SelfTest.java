@@ -44,6 +44,32 @@ public final class SelfTest {
 	public static void init() {
 		if (!enabled()) return;
 		ServerTickEvents.END_SERVER_TICK.register(SelfTest::tick);
+		Thread dog = new Thread(SelfTest::watchdog, "spindle-selftest-watchdog");
+		dog.setDaemon(true);
+		dog.start();
+	}
+
+	/** Every 45 seconds: where is everyone? (Shows up in the log if a test hangs.) */
+	private static void watchdog() {
+		int lastTicks = -1;
+		while (true) {
+			try {
+				Thread.sleep(45000);
+			} catch (InterruptedException e) {
+				return;
+			}
+			if (finished) return;
+			StringBuilder b = new StringBuilder("WATCHDOG ticks=" + ticks + (ticks == lastTicks ? " (STUCK)" : "") + "\n");
+			lastTicks = ticks;
+			for (var entry : Thread.getAllStackTraces().entrySet()) {
+				String name = entry.getKey().getName();
+				if (!name.equals("Server thread") && !name.startsWith("Worker-Main")) continue;
+				b.append("  thread ").append(name).append(" ").append(entry.getKey().getState()).append("\n");
+				StackTraceElement[] st = entry.getValue();
+				for (int i = 0; i < Math.min(14, st.length); i++) b.append("    at ").append(st[i]).append("\n");
+			}
+			Spindle.LOGGER.info(b.toString());
+		}
 	}
 
 	private static void log(String line) {

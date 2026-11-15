@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          ./ci/selftest.sh world 2>&1 | tee -a selftest-out.log
+          SELFTEST_TIMEOUT=$([[ "${{ github.event.head_commit.message }}" == *"[quick]"* ]] && echo 420 || echo 1500) ./ci/selftest.sh world 2>&1 | tee -a selftest-out.log
       - name: report test results
         if: always()
         run: |
